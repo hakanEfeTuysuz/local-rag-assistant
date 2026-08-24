@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Sanal ortam
+venv/
+env/
+
+# Çevresel değişkenler ve veritabanı
+.env
+chroma_db/
