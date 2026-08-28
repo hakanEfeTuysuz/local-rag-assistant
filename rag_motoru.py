@@ -1,14 +1,14 @@
 import os
 import argparse
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import OllamaEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_ollama import OllamaEmbeddings  # YENİ NESİL IMPORT
 from langchain_community.vectorstores import Chroma
+from config import EMBED_MODEL, DB_DIR  # MERKEZİ AYARLAR
 
 def pdf_hazirla(dosya_yolu):
     print(f"1. Aşama: '{dosya_yolu}' yükleniyor...")
     
-    # HATA YAKALAMA 1: Dosya var mı kontrolü
     if not os.path.exists(dosya_yolu):
         raise FileNotFoundError(f"Belirtilen '{dosya_yolu}' dosyası bulunamadı! Lütfen yolu kontrol edin.")
         
@@ -17,7 +17,8 @@ def pdf_hazirla(dosya_yolu):
         dokumanlar = loader.load()
         print(f"-> Başarılı! PDF toplam {len(dokumanlar)} sayfa olarak okundu.\n")
     except Exception as e:
-        raise Exception(f"PDF okunurken kritik bir hata oluştu: {str(e)}")
+        # SENIOR DOKUNUŞU: 'from e' ile gerçek hata zincirini koruyoruz
+        raise Exception(f"PDF okunurken kritik bir hata oluştu: {str(e)}") from e
 
     print("2. Aşama: Metin parçalara bölünüyor (Chunking)...")
     text_splitter = RecursiveCharacterTextSplitter(
@@ -32,30 +33,29 @@ def pdf_hazirla(dosya_yolu):
 def vektor_veritabanina_kaydet(parcalar):
     print("3. Aşama: Metinler vektörlere çevriliyor ve veritabanına kaydediliyor...")
     try:
-        embeddings = OllamaEmbeddings(model="nomic-embed-text")
+        embeddings = OllamaEmbeddings(model=EMBED_MODEL)
         vektor_db = Chroma.from_documents(
             documents=parcalar,
             embedding=embeddings,
-            persist_directory="./chroma_db"
+            persist_directory=DB_DIR
         )
-        print("-> Başarılı! Vektör veritabanı oluşturuldu ve '.chroma_db' klasörüne kaydedildi.\n")
+        # SENIOR DOKUNUŞU: Diske kaydı garanti altına alıyoruz
+        vektor_db.persist() 
+        print(f"-> Başarılı! Vektör veritabanı oluşturuldu ve '{DB_DIR}' klasörüne kaydedildi.\n")
         return vektor_db
-    # HATA YAKALAMA 2: Ollama servisi kapalıysa uyarı ver
     except Exception as e:
-         raise Exception(f"Vektör veritabanı oluşturulamadı. Ollama servisi çalışıyor mu? Detay: {str(e)}")
+         raise Exception(f"Vektör veritabanı oluşturulamadı. Ollama servisi çalışıyor mu? Detay: {str(e)}") from e
 
 if __name__ == "__main__":
-    # ARGPARSE KULLANIMI: Dışarıdan dinamik parametre alma
     parser = argparse.ArgumentParser(description="PDF dosyasını RAG sistemi için vektör veritabanına kaydeder.")
     parser.add_argument("--pdf", type=str, required=True, help="İşlenecek PDF dosyasının yolu (örn: cv.pdf)")
     args = parser.parse_args()
     
     try:
-        if not os.path.exists("./chroma_db"):
+        if not os.path.exists(DB_DIR):
             bolunmus_metinler = pdf_hazirla(args.pdf)
             vektor_veritabani = vektor_veritabanina_kaydet(bolunmus_metinler)
         else:
-            print("Uyarı: './chroma_db' klasörü zaten mevcut. Yeni PDF eklemek istiyorsanız önce bu klasörü silin.")
+            print(f"Uyarı: '{DB_DIR}' klasörü zaten mevcut. Yeni PDF eklemek istiyorsanız önce bu klasörü silin.")
     except Exception as hata:
-        # Hataları kırmızı çarpı ile zarifçe ekrana basıyoruz
         print(f"\n❌ SİSTEM HATASI: {hata}")
