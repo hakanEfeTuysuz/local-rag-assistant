@@ -3,7 +3,7 @@ import argparse
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_ollama import OllamaEmbeddings  # YENİ NESİL IMPORT
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from config import EMBED_MODEL, DB_DIR  # MERKEZİ AYARLAR
 
 def pdf_hazirla(dosya_yolu):
@@ -39,8 +39,7 @@ def vektor_veritabanina_kaydet(parcalar):
             embedding=embeddings,
             persist_directory=DB_DIR
         )
-        # SENIOR DOKUNUŞU: Diske kaydı garanti altına alıyoruz
-        vektor_db.persist() 
+ 
         print(f"-> Başarılı! Vektör veritabanı oluşturuldu ve '{DB_DIR}' klasörüne kaydedildi.\n")
         return vektor_db
     except Exception as e:

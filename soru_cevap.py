@@ -1,50 +1,73 @@
 import os
 import argparse
-from langchain_community.embeddings import OllamaEmbeddings
-from langchain_community.vectorstores import Chroma
-from langchain_community.llms import Ollama
-from langchain.chains import RetrievalQA
+from langchain_ollama import OllamaEmbeddings, ChatOllama
+from langchain_chroma import Chroma
+from langchain_classic.chains import create_retrieval_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
+from config import EMBED_MODEL, LLM_MODEL, DB_DIR, RETRIEVER_K  # MERKEZİ AYARLAR
 
 def asistanla_konus(soru):
-    # HATA YAKALAMA 1: Veritabanı yoksa patlama, uyarı ver!
-    if not os.path.exists("./chroma_db"):
-        raise FileNotFoundError("Vektör veritabanı bulunamadı! Önce 'rag_motoru.py' çalıştırılarak veritabanı oluşturulmalıdır.")
+    if not os.path.exists(DB_DIR):
+        raise FileNotFoundError(f"Vektör veritabanı bulunamadı! Önce 'rag_motoru.py' çalıştırılarak {DB_DIR} oluşturulmalıdır.")
 
     print("1. Aşama: Veritabanı ve Vektör Modeli yükleniyor...")
     try:
-        embeddings = OllamaEmbeddings(model="nomic-embed-text")
-        vektor_db = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
+        embeddings = OllamaEmbeddings(model=EMBED_MODEL)
+        vektor_db = Chroma(persist_directory=DB_DIR, embedding_function=embeddings)
+        retriever = vektor_db.as_retriever(search_kwargs={"k": RETRIEVER_K})
     except Exception as e:
-        raise Exception(f"Veritabanı yüklenirken hata oluştu: {str(e)}")
+        raise Exception(f"Veritabanı yüklenirken hata oluştu: {str(e)}") from e
 
     print("2. Aşama: Llama 3 Modeli hazırlanıyor...")
     try:
-        llm = Ollama(model="llama3")
-        
-        print("3. Aşama: RAG Zinciri (Chain) oluşturuluyor...\n")
-        qa_zinciri = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=vektor_db.as_retriever(search_kwargs={"k": 2})
-        )
+        # Eski nesil 'Ollama' yerine yeni nesil 'OllamaLLM' kullanıyoruz
+        llm = ChatOllama(model=LLM_MODEL)
     except Exception as e:
-         raise Exception(f"Model yüklenirken hata. Ollama çalışıyor mu? Hata: {str(e)}")
+         raise Exception(f"Model yüklenirken hata. Ollama çalışıyor mu? Hata: {str(e)}") from e
+
+    print("3. Aşama: LCEL Mimarisi ile RAG Zinciri oluşturuluyor...\n")
+    try:
+        # LCEL Mimarisi: Sisteme "Genel Amaçlı ve Çok Dilli" bir asistan olduğunu öğretiyoruz
+        sistem_promptu = (
+        "Sen, kullanıcının yüklediği belgeler üzerinden bilgi çıkaran, yerel donanımda çalışan zeki bir yapay zeka asistanısın. "
+        "Sana verilen bağlam (context) İngilizce olsa bile, "
+        "SEN HER ZAMAN SADECE TÜRKÇE cevap vereceksin. "
+        "Cevabında tek bir İngilizce kelime veya cümle bile kullanma; "
+        "bağlamdaki bilgileri kendi cümlelerinle Türkçeye çevirerek anlat. "
+        "Sana verilen bağlam (context) bilgilerini kullanarak kullanıcının sorusunu cevapla. "
+        "Eğer cevabı bağlamda bulamazsan, uydurma, sadece bilmediğini söyle.\n\n"
+        "Bağlam:\n{context}"
+        )
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", sistem_promptu),
+            ("human", "{input}"),
+        ])
+
+        # Yeni nesil zincirleri (Chain) birbirine bağlıyoruz
+        soru_cevap_zinciri = create_stuff_documents_chain(llm, prompt)
+        rag_zinciri = create_retrieval_chain(retriever, soru_cevap_zinciri)
+
+    except Exception as e:
+         raise Exception(f"Zincir oluşturulurken hata: {str(e)}") from e
 
     print(f"Soru: {soru}")
-    print("Cevap düşünülüyor... (Llama 3 yerel donanımında çalışıyor, biraz sürebilir)\n")
+    print("Cevap düşünülüyor... (LCEL mimarisi kullanılıyor)\n")
 
     try:
-        cevap = qa_zinciri.invoke(soru)
+        # LCEL yapısında invoke içine bir sözlük (dictionary) gönderilir
+        cevap = rag_zinciri.invoke({"input": soru})
         print("🤖 ASİSTANIN CEVABI:")
         print("-" * 50)
-        print(cevap['result'])
+        # Cevabın geldiği key artık 'result' değil 'answer'dır
+        print(cevap['answer'])
         print("-" * 50)
     except Exception as e:
-        raise Exception(f"Cevap üretilirken donanımsal veya sistemsel bir hata oluştu: {str(e)}")
+        raise Exception(f"Cevap üretilirken donanımsal veya sistemsel bir hata oluştu: {str(e)}") from e
 
 if __name__ == "__main__":
-    # ARGPARSE KULLANIMI: Terminalden -s veya --soru parametresi ile dinamik soru alma
-    parser = argparse.ArgumentParser(description="Oluşturulan RAG veritabanı üzerinde LLM'e soru sorar.")
+    parser = argparse.ArgumentParser(description="Oluşturulan RAG veritabanı üzerinde yeni nesil LCEL ile soru sorar.")
     parser.add_argument("-s", "--soru", type=str, required=True, help="Asistana sormak istediğiniz soru (Tırnak içinde yazınız)")
     args = parser.parse_args()
 
