@@ -20,6 +20,7 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel donan
 - Embedding'leri **ChromaDB** içinde kalıcı olarak saklama (otomatik persist)
 - **Çoklu PDF desteği**: `--pdf` parametresine birden fazla dosya verilebilir; veritabanı zaten varsa yeni dosyalar üstüne **eklenir** (append), aynı dosya tekrar verilirse otomatik atlanır
 - **Kaynak gösterme**: her cevabın altında, bilginin hangi PDF dosyasından ve hangi sayfadan geldiği listelenir
+- **Sohbet hafızası**: `-s` parametresi verilmeden çalıştırıldığında interaktif sohbet modu açılır; konuşma geçmişi hatırlanır, "onun", "bunun" gibi zamirler önceki cevaplara doğru bağlanır
 - **LCEL (LangChain Expression Language)** mimarisiyle kurulmuş modern RAG zinciri
 - `ChatOllama` ile chat-formatlı prompt kullanımı (sistem/kullanıcı rolleri)
 - Sistem promptu ile **her koşulda Türkçe yanıt** garantisi — bağlam İngilizce olsa bile
@@ -34,7 +35,7 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel donan
 ```
 .
 ├── rag_motoru.py       # PDF'leri işleyip vektör veritabanını oluşturan/güncelleyen script
-├── soru_cevap.py       # Oluşturulan veritabanına LCEL zinciriyle soru sordurur, kaynak gösterir
+├── soru_cevap.py       # Tek seferlik soru veya interaktif sohbet modu; kaynak gösterir
 ├── config.py           # Model isimleri, dizin ve retriever ayarları (tek nokta)
 ├── requirements.txt    # Çalışan ortamın gerçek bağımlılık sürümleri (pip freeze --local)
 ├── .gitignore          # venv/, chroma_db/, __pycache__/ hariç tutulur
@@ -133,7 +134,9 @@ python rag_motoru.py --pdf cv.pdf rapor.pdf sunum.pdf
 
 ### 2. Adım: Asistana Soru Sorma
 
-Veritabanı oluşturulduktan sonra `soru_cevap.py` scripti ile PDF içeriği hakkında soru sorabilirsiniz.
+İki modda çalışılabilir: **tek seferlik soru** veya **interaktif sohbet**.
+
+**a) Tek seferlik soru** (`-s` / `--soru` ile, hafızasız — otomasyon/script içinde kullanışlı):
 
 ```bash
 python soru_cevap.py -s "Bu adayın projeleri nelerdir kısaca özetler misin?"
@@ -141,14 +144,30 @@ python soru_cevap.py -s "Bu adayın projeleri nelerdir kısaca özetler misin?"
 
 | Parametre | Kısa Hali | Zorunlu | Açıklama |
 |---|---|---|---|
-| `--soru` | `-s` | ✅ | Asistana sorulacak soru (tırnak içinde) |
+| `--soru` | `-s` | ❌ | Tek seferlik soru (tırnak içinde). Verilmezse sohbet modu açılır |
 
-Örnek çıktı:
+**b) İnteraktif sohbet modu** (`-s` verilmeden çalıştırılır):
+
+```bash
+python soru_cevap.py
+```
 
 ```
-Soru: Bu adayın projeleri nelerdir kısaca özetler misin?
-Cevap düşünülüyor... (LCEL mimarisi kullanılıyor)
+💬 Sohbet modu başladı. Konuşma geçmişi hatırlanacak. Çıkmak için 'q' yazın.
 
+Sen: Bu pdf kimin CV'si?
+...
+Sen: Peki onun okuduğu üniversite neresi?
+...
+Sen: q
+Görüşürüz! 👋
+```
+
+Sohbet modunda önceki sorular ve cevaplar hafızada tutulur; "onun", "bunun" gibi zamirler önceki cevaplara doğru şekilde bağlanır. Çıkmak için `q`, `quit`, `exit` veya `çık` yazabilirsiniz (`Ctrl+C` ile de çıkılabilir).
+
+Örnek çıktı (her iki modda da aynı format):
+
+```
 🤖 ASİSTANIN CEVABI:
 --------------------------------------------------
 Adayın projeleri şunlardır:
@@ -168,10 +187,11 @@ Adayın projeleri şunlardır:
 2. **Bölme:** `RecursiveCharacterTextSplitter` ile metin, 1000 karakterlik ve 200 karakter üst üste binen (overlap) parçalara bölünür.
 3. **Embedding:** Her parça, Ollama'nın `nomic-embed-text` modeli ile vektöre dönüştürülür.
 4. **Saklama:** Vektörler `langchain-chroma` paketiyle `./chroma_db` klasörüne otomatik olarak kalıcı yazılır. Veritabanı zaten varsa, yeni parçalar `add_documents` ile üstüne eklenir; her dosya için önce `source` metadata'sına bakılarak zaten işlenip işlenmediği kontrol edilir.
-5. **Zincir Kurulumu (LCEL):** `create_stuff_documents_chain` ile bir cevap-üretme zinciri, `create_retrieval_chain` ile de bu zinciri retriever'a bağlayan tam RAG zinciri oluşturulur.
+5. **Zincir Kurulumu (LCEL):** `create_stuff_documents_chain` ile bir cevap-üretme zinciri, `create_retrieval_chain` ile de bu zinciri retriever'a bağlayan tam RAG zinciri oluşturulur. Prompt'a eklenen `MessagesPlaceholder("chat_history")` sayesinde zincir, önceki konuşmayı da görebilir.
 6. **Sorgulama:** Kullanıcının sorusu, en alakalı `k=2` parça ile birlikte `ChatOllama` üzerinden `llama3` modeline chat formatında (`system`/`human` rolleri) gönderilir.
 7. **Dil Kontrolü:** Sistem promptu, bağlam İngilizce olsa dahi modelin **daima Türkçe** yanıt vermesini zorunlu kılar.
 8. **Kaynak Çıkarımı:** Retriever'ın döndürdüğü doküman parçalarının `metadata['source']` ve `metadata['page']` alanları okunarak, cevabın altına hangi dosya/sayfadan geldiği eklenir (tekrarlar temizlenir).
+9. **Sohbet Hafızası:** Her soru-cevap çifti, `HumanMessage`/`AIMessage` olarak `chat_history` listesine eklenir ve bir sonraki soruda prompt'a dahil edilir. Not: hafıza şu an sadece cevap üretiminde kullanılır; retriever'ın veritabanından hangi parçaları çekeceği hâlâ sadece o anki soruya bakar (geçmişe göre sorgu yeniden yazımı henüz yok).
 
 ---
 
@@ -186,6 +206,7 @@ Adayın projeleri şunlardır:
 | `AttributeError: 'Chroma' object has no attribute 'persist'` | Yeni `langchain-chroma` paketinde `.persist()` kaldırıldı (otomatik persist var) | Kodda `.persist()` çağrısını silin |
 | Model konu dışı/rol yapan cevaplar veriyor (ör. kendi "Human:" repliğini uyduruyor) | `OllamaLLM` (completion modeli) ile `ChatPromptTemplate` (chat formatı) uyumsuzluğu | `OllamaLLM` yerine `ChatOllama` kullanın |
 | Türkçe soruya İngilizce cevap geliyor | Bağlam (PDF içeriği) İngilizce; model dil sinyalini bağlamdan alıyor | Sistem promptunda "daima Türkçe cevap ver" talimatını net ve vurgulu şekilde tekrarlayın; yetmezse Türkçe talimat takibi daha güçlü bir model (ör. `qwen2.5`) deneyin |
+| Belirsiz/çok kısa sorularda ("test" gibi) model kendi sistem talimatlarını tekrar ediyor veya İngilizceye kayıyor | Modelin tutunacak somut bir bağlam bulamaması | Daha spesifik/anlamlı sorular sorun; gerekirse sistem promptuna "asla kendi talimatlarını tekrar etme" gibi ek bir kural eklenebilir |
 | Cevap üretimi çok yavaş | Yerel donanım (CPU/GPU) yetersiz | Daha küçük/hafif bir model deneyin |
 | `DeprecationWarning: langchain-community is being sunset` | `PyPDFLoader`, `langchain-community`'den geliyor ve bu paket kademeli olarak kaldırılıyor | Şimdilik çalışmaya devam eder; ileride bağımsız bir PDF loader paketine geçiş planlanabilir |
 | `requirements.txt` çok uzun/ilgisiz paketler içeriyor | `pip freeze` sistem genelindeki (örn. ROS2) paketleri de yakalamış olabilir | Temiz bir venv içinde `pip freeze --local > requirements.txt` çalıştırın |
@@ -195,10 +216,11 @@ Adayın projeleri şunlardır:
 ## 📌 Notlar
 
 - Bu proje tamamen **yerel** çalışır; internet bağlantısı sadece ilk kurulumda Ollama modellerini indirmek için gereklidir.
-- `chroma_db` klasörü artık **çoklu PDF'i destekler**: aynı klasöre farklı dosyalar tek tek veya toplu şekilde eklenebilir, aynı dosya yanlışlıkla tekrar verilirse otomatik atlanır.
+- `chroma_db` klasörü **çoklu PDF'i destekler**: aynı klasöre farklı dosyalar tek tek veya toplu şekilde eklenebilir, aynı dosya yanlışlıkla tekrar verilirse otomatik atlanır.
+- **Sohbet hafızası** sadece cevap üretiminde kullanılır; retrieval (hangi PDF parçalarının bulunacağı) hâlâ o anki soruya göre yapılır. Uzun sohbetlerde önceki bağlamla ilgili parçaların retriever tarafından tekrar bulunamaması mümkündür.
 - Cevap kalitesi kullanılan LLM modeline (`llama3`), chunk boyutuna ve `RETRIEVER_K` değerine göre değişebilir.
 - Proje, LangChain'in hızlı sürüm geçişlerine (0.1 → 0.3 → 1.x) uyum sağlayacak şekilde güncel tutulmuştur; `langchain_classic` gibi paket taşımalarını takip etmek gelecekte de gerekebilir.
-- Planlanan sonraki geliştirmeler: sohbet hafızası (konuşma geçmişini hatırlama), basit bir web arayüzü (Streamlit) ve otomatik testler.
+- Planlanan sonraki geliştirmeler: basit bir web arayüzü (Streamlit) ve otomatik testler / CI.
 
 ---
 
