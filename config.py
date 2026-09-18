@@ -10,3 +10,4 @@ DB_DIR = "./chroma_db"
 
 # RAG Ayarları
 RETRIEVER_K = 2 # Aramada getirilecek parça sayısı
+NUM_CTX = 8192  # Ollama modelinin bağlam penceresi (token). Yüksek k değerleriyle çalışırken bunu büyütmek gerekir.

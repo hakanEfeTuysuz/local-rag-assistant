@@ -10,3 +10,5 @@ env/
 # Çevresel değişkenler ve veritabanı
 .env
 chroma_db/
+web_chroma_db/
+yuklenen_pdfler/
