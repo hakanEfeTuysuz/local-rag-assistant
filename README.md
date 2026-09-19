@@ -23,6 +23,7 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 - **Kaynak gösterme**: her cevabın altında, bilginin hangi PDF dosyasından ve hangi sayfadan geldiği listelenir
 - **Sohbet hafızası**: konuşma geçmişi hatırlanır; "onun", "bunun" gibi zamirler önceki cevaplara doğru bağlanır
 - **Konu uyumu kontrolü**: getirilen bağlam, sorulan konuyla örtüşmüyorsa model bunu doğruymuş gibi sunmak yerine açıkça belirtir
+- **Otomatik testler + CI**: kritik fonksiyonlar için yazılmış pytest testleri, her `git push`'ta GitHub Actions üzerinden otomatik çalışır
 - **LCEL (LangChain Expression Language)** mimarisiyle kurulmuş modern RAG zinciri
 - `ChatOllama` ile chat-formatlı prompt kullanımı (sistem/kullanıcı rolleri)
 - Sistem promptu ile **her koşulda Türkçe yanıt** garantisi — bağlam İngilizce olsa bile
@@ -35,15 +36,22 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 
 ```
 .
-├── app.py              # Streamlit web arayüzü: PDF yükleme + sohbet, tarayıcı üzerinden
-├── rag_motoru.py       # PDF'leri işleyip vektör veritabanını oluşturan/güncelleyen script (CLI)
-├── soru_cevap.py       # Terminalden tek seferlik soru veya interaktif sohbet modu; kaynak gösterir
-├── config.py           # Model isimleri, dizin, bağlam penceresi ve retriever ayarları (tek nokta)
-├── requirements.txt    # Çalışan ortamın gerçek bağımlılık sürümleri (pip freeze --local)
-├── .gitignore          # venv/, chroma_db/, web_chroma_db/, yuklenen_pdfler/, __pycache__/ hariç tutulur
-├── chroma_db/          # CLI'nin vektör veritabanı (otomatik oluşur, repoya dahil edilmez)
-├── web_chroma_db/      # Web arayüzünün kendi vektör veritabanı (otomatik oluşur, repoya dahil edilmez)
-├── yuklenen_pdfler/    # Web arayüzünden yüklenen PDF'lerin geçici kopyaları (repoya dahil edilmez)
+├── app.py                    # Streamlit web arayüzü: PDF yükleme + sohbet, tarayıcı üzerinden
+├── rag_motoru.py             # PDF'leri işleyip vektör veritabanını oluşturan/güncelleyen script (CLI)
+├── soru_cevap.py             # Terminalden tek seferlik soru veya interaktif sohbet modu; kaynak gösterir
+├── config.py                 # Model isimleri, dizin, bağlam penceresi ve retriever ayarları (tek nokta)
+├── tests/                    # Ollama'ya bağımlı olmayan mantık için pytest testleri
+│   ├── test_rag_motoru.py
+│   └── test_soru_cevap.py
+├── testleri_calistir.sh      # Testleri, sistem kaynaklı plugin sorunlarından bağımsız çalıştıran script
+├── pytest.ini                # pytest yapılandırması
+├── .github/workflows/
+│   └── tests.yml             # Her push'ta testleri otomatik çalıştıran GitHub Actions tanımı
+├── requirements.txt          # Çalışan ortamın gerçek bağımlılık sürümleri (pip freeze --local)
+├── .gitignore                # venv/, chroma_db/, web_chroma_db/, yuklenen_pdfler/, __pycache__/ hariç tutulur
+├── chroma_db/                # CLI'nin vektör veritabanı (otomatik oluşur, repoya dahil edilmez)
+├── web_chroma_db/            # Web arayüzünün kendi vektör veritabanı (otomatik oluşur, repoya dahil edilmez)
+├── yuklenen_pdfler/          # Web arayüzünden yüklenen PDF'lerin geçici kopyaları (repoya dahil edilmez)
 └── README.md
 ```
 
@@ -80,6 +88,7 @@ langchain-chroma        # Chroma (otomatik persist eden yeni nesil paket)
 chromadb
 pypdf
 streamlit               # web arayüzü
+pytest                  # testler
 ```
 
 > 💡 Bu dosya, proje için oluşturulmuş **izole bir sanal ortamda** `pip freeze --local` ile üretilmiştir. `--local` bayrağı önemlidir: sistem genelinde kurulu başka paketlerin (örn. ROS2 gibi) listeye sızmasını engeller ve sadece bu projeye ait bağımlılıkları listeler.
@@ -218,6 +227,38 @@ Adayın projeleri şunlardır:
 
 ---
 
+## 🧪 Testler ve CI
+
+Proje, Ollama'ya bağımlı olmayan (yani gerçek bir model çalıştırmadan test edilebilen) mantık için otomatik testler içerir: `kaynaklari_listele` (kaynak gösterme mantığı) ve `dosya_zaten_islendi_mi` (çoklu PDF'de tekrar-eklenmeyi önleme mantığı).
+
+**Testleri yerel olarak çalıştırmak için:**
+
+```bash
+./testleri_calistir.sh
+```
+
+Doğrudan `pytest tests/` çalıştırmak yerine bu script'in kullanılması önerilir; script, pytest'in başlangıçta sistem genelindeki paketleri (örn. ROS2 kurulu makinelerde olduğu gibi) otomatik eklenti (plugin) olarak yüklemeye çalışmasını engeller, aksi halde ilgisiz bir hata alınabilir.
+
+Beklenen çıktı:
+
+```
+collected 7 items
+
+tests/test_rag_motoru.py::test_dosya_veritabaninda_varsa_true_doner PASSED
+tests/test_rag_motoru.py::test_dosya_veritabaninda_yoksa_false_doner PASSED
+tests/test_soru_cevap.py::test_tek_dosya_tek_sayfa PASSED
+tests/test_soru_cevap.py::test_sayfa_numarasi_birle_basliyor PASSED
+tests/test_soru_cevap.py::test_tekrarlanan_kaynaklar_temizlenir PASSED
+tests/test_soru_cevap.py::test_farkli_klasordeki_ayni_isimli_dosya PASSED
+tests/test_soru_cevap.py::test_bos_liste PASSED
+
+7 passed
+```
+
+**CI (GitHub Actions):** `.github/workflows/tests.yml` sayesinde, bu depoya her `git push` yapıldığında aynı testler GitHub'ın kendi sunucusunda (sıfırdan, temiz bir Ubuntu ortamında) otomatik olarak çalışır. Sonuç, repo'nun **Actions** sekmesinde ✅ (geçti) veya ❌ (başarısız) olarak görülebilir — bu sayede bir değişiklik kritik bir fonksiyonu bozarsa, kod canlıya/kullanıma geçmeden önce fark edilir.
+
+---
+
 ## 🛠️ Nasıl Çalışır?
 
 1. **Yükleme:** `PyPDFLoader` ile her PDF sayfa sayfa okunur.
@@ -252,6 +293,7 @@ Adayın projeleri şunlardır:
 | `fontTools is required to fully parse...` uyarısı | PDF'in kendi font kodlaması eksik meta veri içeriyor | Zararsızdır, metin okumayı etkilemez; isterseniz `pip install fonttools` ile giderebilirsiniz |
 | Cevap üretimi çok yavaş | Modelin çalıştığı makinenin kaynakları yetersiz kalıyor | Daha küçük/hafif bir model deneyin |
 | `requirements.txt` çok uzun/ilgisiz paketler içeriyor | `pip freeze` sistem genelindeki başka paketleri de yakalamış olabilir | Temiz bir venv içinde `pip freeze --local > requirements.txt` çalıştırın |
+| `pytest tests/` çalıştırınca `PluginValidationError` veya `ModuleNotFoundError: No module named 'lark'` gibi ilgisiz hatalar | pytest, `PYTHONPATH`'e sızmış sistem paketlerini (örn. ROS2) eklenti sanıp yüklemeye çalışıyor | Doğrudan `pytest` yerine `./testleri_calistir.sh` kullanın |
 
 ---
 
@@ -261,9 +303,10 @@ Adayın projeleri şunlardır:
 - Web arayüzü ve CLI **birbirinden ayrı veritabanları** kullanır; birinde eklediğiniz PDF diğerinde görünmez, bu bilinçli bir tasarım kararıdır.
 - **Sohbet hafızası** sadece cevap üretiminde kullanılır; retrieval (hangi PDF parçalarının bulunacağı) hâlâ o anki soruya göre yapılır. Uzun sohbetlerde önceki bağlamla ilgili parçaların retriever tarafından tekrar bulunamaması mümkündür.
 - **Konu uyumu kontrolü** bir güvence değil, bir azaltma önlemidir: model hâlâ, özellikle kurnaz/varsayım içeren sorularda ("X ile Y arasında bağlantı var mı?" gibi), zorlama bir bağlantı kurabilir. Kritik kullanımlarda cevapları her zaman kaynak sayfalarıyla çarpraz kontrol edin.
+- **Testler** şu an sadece Ollama'ya bağımlı olmayan mantığı kapsıyor; embedding/LLM üretimi gibi kısımlar otomatik test edilmiyor (bunun için Ollama'nın CI ortamında çalışması gerekirdi).
 - Cevap kalitesi kullanılan LLM modeline (`llama3`), chunk boyutuna, `RETRIEVER_K` (veya web arayüzündeki k kaydırıcısı) ve `NUM_CTX` değerine göre değişebilir.
 - Proje, LangChain'in hızlı sürüm geçişlerine (0.1 → 0.3 → 1.x) uyum sağlayacak şekilde güncel tutulmuştur; `langchain_classic` gibi paket taşımalarını takip etmek gelecekte de gerekebilir.
-- Planlanan sonraki geliştirmeler: otomatik testler / GitHub Actions CI, retrieval'ın sohbet geçmişine göre sorguyu yeniden yazması (query rewriting).
+- Planlanan sonraki geliştirmeler: retrieval'ın sohbet geçmişine göre sorguyu yeniden yazması (query rewriting).
 
 ---
 
