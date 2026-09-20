@@ -8,7 +8,12 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Depoyu kopyala
@@ -28,4 +33,4 @@ jobs:
       - name: Testleri çalıştır
         env:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
-        run: pytest tests/ -v
+        run: python testleri_calistir.py
