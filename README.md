@@ -23,7 +23,7 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 - **Kaynak gösterme**: her cevabın altında, bilginin hangi PDF dosyasından ve hangi sayfadan geldiği listelenir
 - **Sohbet hafızası**: konuşma geçmişi hatırlanır; "onun", "bunun" gibi zamirler önceki cevaplara doğru bağlanır
 - **Konu uyumu kontrolü**: getirilen bağlam, sorulan konuyla örtüşmüyorsa model bunu doğruymuş gibi sunmak yerine açıkça belirtir
-- **Otomatik testler + CI**: kritik fonksiyonlar için yazılmış pytest testleri, her `git push`'ta GitHub Actions üzerinden otomatik çalışır
+- **Otomatik testler + CI**: kritik fonksiyonlar için yazılmış pytest testleri, her `git push`'ta GitHub Actions üzerinden otomatik çalışır; testler Linux/Mac/Windows'ta çalıştırılabilir
 - **LCEL (LangChain Expression Language)** mimarisiyle kurulmuş modern RAG zinciri
 - `ChatOllama` ile chat-formatlı prompt kullanımı (sistem/kullanıcı rolleri)
 - Sistem promptu ile **her koşulda Türkçe yanıt** garantisi — bağlam İngilizce olsa bile
@@ -43,7 +43,8 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 ├── tests/                    # Ollama'ya bağımlı olmayan mantık için pytest testleri
 │   ├── test_rag_motoru.py
 │   └── test_soru_cevap.py
-├── testleri_calistir.sh      # Testleri, sistem kaynaklı plugin sorunlarından bağımsız çalıştıran script
+├── testleri_calistir.sh      # Testleri, sistem kaynaklı plugin sorunlarından bağımsız çalıştıran script (Linux/Mac)
+├── testleri_calistir.py      # Aynı işi yapan, Windows dahil her platformda çalışan Python karşılığı
 ├── pytest.ini                # pytest yapılandırması
 ├── .github/workflows/
 │   └── tests.yml             # Her push'ta testleri otomatik çalıştıran GitHub Actions tanımı
@@ -237,7 +238,12 @@ Proje, Ollama'ya bağımlı olmayan (yani gerçek bir model çalıştırmadan te
 ./testleri_calistir.sh
 ```
 
-Doğrudan `pytest tests/` çalıştırmak yerine bu script'in kullanılması önerilir; script, pytest'in başlangıçta sistem genelindeki paketleri (örn. ROS2 kurulu makinelerde olduğu gibi) otomatik eklenti (plugin) olarak yüklemeye çalışmasını engeller, aksi halde ilgisiz bir hata alınabilir.
+> 🪟 **Windows kullanıcıları:** Yukarıdaki `.sh` script'i doğrudan Windows CMD/PowerShell'de çalışmaz (Git Bash veya WSL gerektirir). Onun yerine, aynı işi yapan platform bağımsız Python karşılığını kullanabilirsiniz:
+> ```bash
+> python testleri_calistir.py
+> ```
+
+Her iki script de aynı korumayı sağlar: pytest'in başlangıçta sistem genelindeki paketleri (örn. ROS2 kurulu makinelerde olduğu gibi) otomatik eklenti (plugin) olarak yüklemeye çalışmasını engeller, aksi halde ilgisiz bir hata alınabilir.
 
 Beklenen çıktı:
 
@@ -293,7 +299,7 @@ tests/test_soru_cevap.py::test_bos_liste PASSED
 | `fontTools is required to fully parse...` uyarısı | PDF'in kendi font kodlaması eksik meta veri içeriyor | Zararsızdır, metin okumayı etkilemez; isterseniz `pip install fonttools` ile giderebilirsiniz |
 | Cevap üretimi çok yavaş | Modelin çalıştığı makinenin kaynakları yetersiz kalıyor | Daha küçük/hafif bir model deneyin |
 | `requirements.txt` çok uzun/ilgisiz paketler içeriyor | `pip freeze` sistem genelindeki başka paketleri de yakalamış olabilir | Temiz bir venv içinde `pip freeze --local > requirements.txt` çalıştırın |
-| `pytest tests/` çalıştırınca `PluginValidationError` veya `ModuleNotFoundError: No module named 'lark'` gibi ilgisiz hatalar | pytest, `PYTHONPATH`'e sızmış sistem paketlerini (örn. ROS2) eklenti sanıp yüklemeye çalışıyor | Doğrudan `pytest` yerine `./testleri_calistir.sh` kullanın |
+| `pytest tests/` çalıştırınca `PluginValidationError` veya `ModuleNotFoundError: No module named 'lark'` gibi ilgisiz hatalar | pytest, `PYTHONPATH`'e sızmış sistem paketlerini (örn. ROS2) eklenti sanıp yüklemeye çalışıyor | Doğrudan `pytest` yerine `./testleri_calistir.sh` (veya Windows'ta `python testleri_calistir.py`) kullanın |
 
 ---
 
