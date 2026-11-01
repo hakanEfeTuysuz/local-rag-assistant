@@ -1,76 +1,43 @@
-import os
 import argparse
+import logging
+import os
+import sys
 
-from langchain_ollama import OllamaEmbeddings, ChatOllama
-from langchain_chroma import Chroma
-from langchain_classic.chains import create_retrieval_chain
-from langchain_classic.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
-from config import EMBED_MODEL, LLM_MODEL, DB_DIR, RETRIEVER_K  # MERKEZİ AYARLAR
+from config import DB_DIR, RETRIEVER_K  # MERKEZİ AYARLAR
+from rag_zinciri import (
+    RagHatasi,
+    VeritabaniHatasi,
+    cli_loglamasini_ayarla,
+    gecmisi_kirp,
+    kaynaklari_listele,
+    modelleri_yukle,
+    vektor_db_ac,
+    veritabani_bos_mu,
+    zinciri_kur,
+)
 
+logger = logging.getLogger(__name__)
 
-def kaynaklari_listele(dokumanlar):
-    """
-    Retriever'ın getirdiği doküman parçalarından benzersiz (dosya, sayfa)
-    kaynak listesi çıkarır. PyPDFLoader sayfaları 0'dan başlatır,
-    kullanıcıya göstermeden önce 1 ekliyoruz.
-    """
-    kaynaklar = []
-    for doc in dokumanlar:
-        dosya_adi = os.path.basename(doc.metadata.get("source", "bilinmeyen dosya"))
-        sayfa = doc.metadata.get("page")
-        if sayfa is not None:
-            kaynaklar.append(f"{dosya_adi}, sayfa {sayfa + 1}")
-        else:
-            kaynaklar.append(dosya_adi)
-    return list(dict.fromkeys(kaynaklar))
+__all__ = ["zinciri_olustur", "tek_soru_sor", "sohbet_modu", "kaynaklari_listele"]
 
 
 def zinciri_olustur():
     if not os.path.exists(DB_DIR):
-        raise FileNotFoundError(f"Vektör veritabanı bulunamadı! Önce 'rag_motoru.py' çalıştırılarak {DB_DIR} oluşturulmalıdır.")
+        raise VeritabaniHatasi(f"Vektör veritabanı bulunamadı! Önce 'rag_motoru.py' çalıştırılarak {DB_DIR} oluşturulmalıdır.")
 
-    print("1. Aşama: Veritabanı ve Vektör Modeli yükleniyor...")
-    try:
-        embeddings = OllamaEmbeddings(model=EMBED_MODEL)
-        vektor_db = Chroma(persist_directory=DB_DIR, embedding_function=embeddings)
-        retriever = vektor_db.as_retriever(search_kwargs={"k": RETRIEVER_K})
-    except Exception as e:
-        raise Exception(f"Veritabanı yüklenirken hata oluştu: {str(e)}") from e
+    logger.info("1. Aşama: Modeller yükleniyor ve Ollama bağlantısı kontrol ediliyor...")
+    embeddings, llm = modelleri_yukle()
 
-    print("2. Aşama: Llama 3 Modeli hazırlanıyor...")
-    try:
-        llm = ChatOllama(model=LLM_MODEL)
-    except Exception as e:
-        raise Exception(f"Model yüklenirken hata. Ollama çalışıyor mu? Hata: {str(e)}") from e
+    logger.info("2. Aşama: Vektör veritabanı açılıyor...")
+    vektor_db = vektor_db_ac(DB_DIR, embeddings)
+    if veritabani_bos_mu(vektor_db):
+        raise VeritabaniHatasi(f"'{DB_DIR}' veritabanı boş! Önce 'rag_motoru.py --pdf <dosya>' ile PDF ekleyin.")
+    retriever = vektor_db.as_retriever(search_kwargs={"k": RETRIEVER_K})
 
-    print("3. Aşama: LCEL Mimarisi ile RAG Zinciri oluşturuluyor...\n")
-    try:
-        sistem_promptu = (
-            "Sen, kullanıcının yüklediği belgeler üzerinden bilgi çıkaran, yerel donanımda çalışan zeki bir yapay zeka asistanısın. "
-            "Sana verilen bağlam (context) İngilizce olsa bile, "
-            "SEN HER ZAMAN SADECE TÜRKÇE cevap vereceksin. "
-            "Cevabında tek bir İngilizce kelime veya cümle bile kullanma; "
-            "bağlamdaki bilgileri kendi cümlelerinle Türkçeye çevirerek anlat. "
-            "Sana verilen bağlam (context) bilgilerini kullanarak kullanıcının sorusunu cevapla. "
-            "Önceki konuşma geçmişini de dikkate alarak tutarlı cevaplar ver. "
-            "Eğer cevabı bağlamda bulamazsan, uydurma, sadece bilmediğini söyle.\n\n"
-            "Bağlam:\n{context}"
-        )
-
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", sistem_promptu),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-        ])
-
-        soru_cevap_zinciri = create_stuff_documents_chain(llm, prompt)
-        rag_zinciri = create_retrieval_chain(retriever, soru_cevap_zinciri)
-        return rag_zinciri
-    except Exception as e:
-        raise Exception(f"Zincir oluşturulurken hata: {str(e)}") from e
+    logger.info("3. Aşama: LCEL Mimarisi ile RAG Zinciri oluşturuluyor...\n")
+    return zinciri_kur(llm, retriever)
 
 
 def tek_soru_sor(rag_zinciri, soru, chat_history):
@@ -78,23 +45,23 @@ def tek_soru_sor(rag_zinciri, soru, chat_history):
     print("Cevap düşünülüyor... (LCEL mimarisi kullanılıyor)\n")
 
     try:
-        cevap = rag_zinciri.invoke({"input": soru, "chat_history": chat_history})
-
-        print("🤖 ASİSTANIN CEVABI:")
-        print("-" * 50)
-        print(cevap['answer'])
-        print("-" * 50)
-
-        kaynaklar = kaynaklari_listele(cevap.get("context", []))
-        if kaynaklar:
-            print("\n📚 Kaynaklar:")
-            for k in kaynaklar:
-                print(f"  - {k}")
-
-        chat_history.append(HumanMessage(content=soru))
-        chat_history.append(AIMessage(content=cevap["answer"]))
+        cevap = rag_zinciri.invoke({"input": soru, "chat_history": gecmisi_kirp(chat_history)})
     except Exception as e:
-        raise Exception(f"Cevap üretilirken donanımsal veya sistemsel bir hata oluştu: {str(e)}") from e
+        raise RagHatasi(f"Cevap üretilirken bir hata oluştu (Ollama hâlâ çalışıyor mu?): {e}") from e
+
+    print("🤖 ASİSTANIN CEVABI:")
+    print("-" * 50)
+    print(cevap["answer"])
+    print("-" * 50)
+
+    kaynaklar = kaynaklari_listele(cevap.get("context", []))
+    if kaynaklar:
+        print("\n📚 Kaynaklar:")
+        for k in kaynaklar:
+            print(f"  - {k}")
+
+    chat_history.append(HumanMessage(content=soru))
+    chat_history.append(AIMessage(content=cevap["answer"]))
 
 
 def sohbet_modu(rag_zinciri):
@@ -114,14 +81,21 @@ def sohbet_modu(rag_zinciri):
             continue
 
         print()
-        tek_soru_sor(rag_zinciri, soru, chat_history)
+        try:
+            tek_soru_sor(rag_zinciri, soru, chat_history)
+        except KeyboardInterrupt:
+            print("\n(Cevap iptal edildi.)")
+        except RagHatasi as hata:
+            # Tek bir sorudaki hata tüm sohbeti (ve geçmişi) kaybettirmesin
+            print(f"\n❌ {hata}\nTekrar deneyebilir veya 'q' ile çıkabilirsiniz.")
         print()
 
 
-if __name__ == "__main__":
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Oluşturulan RAG veritabanı üzerinde LCEL ile soru sorar. -s verilmezse interaktif sohbet moduna geçer.")
     parser.add_argument("-s", "--soru", type=str, required=False, help="Tek seferlik soru (verilmezse sohbet modu açılır)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    cli_loglamasini_ayarla()
 
     try:
         rag_zinciri = zinciri_olustur()
@@ -129,5 +103,11 @@ if __name__ == "__main__":
             tek_soru_sor(rag_zinciri, args.soru, [])
         else:
             sohbet_modu(rag_zinciri)
-    except Exception as hata:
-        print(f"\n❌ SİSTEM HATASI: {hata}")
+    except RagHatasi as hata:
+        print(f"\n❌ SİSTEM HATASI: {hata}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

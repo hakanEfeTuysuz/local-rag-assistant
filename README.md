@@ -14,21 +14,23 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 
 ## 🚀 Özellikler
 
-- **Streamlit web arayüzü**: tarayıcıdan sürükle-bırak PDF yükleme, ayarlanabilir arama derinliği (k), kalıcı oturum ve tek tuşla veritabanı sıfırlama — kurulumdan sonra tek komutla açılır
+- **Streamlit web arayüzü**: tarayıcıdan sürükle-bırak PDF yükleme, ayarlanabilir arama derinliği (k), kalıcı oturum, tek tuşla veritabanı sıfırlama ve **akış halinde (token token) gelen cevaplar** — kurulumdan sonra tek komutla açılır
 - PDF dosyasını otomatik olarak okuma ve sayfalara ayırma
 - Metni anlamsal parçalara bölme (chunking)
 - `nomic-embed-text` modeli ile embedding oluşturma
 - Embedding'leri **ChromaDB** içinde kalıcı olarak saklama (otomatik persist)
-- **Çoklu PDF desteği**: veritabanı zaten varsa yeni dosyalar üstüne **eklenir** (append), aynı dosya tekrar verilirse otomatik atlanır
+- **Çoklu PDF desteği**: veritabanı zaten varsa yeni dosyalar üstüne **eklenir** (append); aynı dosya tekrar verilirse — farklı bir yoldan veya isimle bile (içerik özeti/SHA-256 ile tanınır) — otomatik atlanır
 - **Kaynak gösterme**: her cevabın altında, bilginin hangi PDF dosyasından ve hangi sayfadan geldiği listelenir
-- **Sohbet hafızası**: konuşma geçmişi hatırlanır; "onun", "bunun" gibi zamirler önceki cevaplara doğru bağlanır
+- **Sohbet hafızası + soru yeniden yazma**: konuşma geçmişi hatırlanır; "onun", "bunun" gibi zamirler içeren sorular, arama yapılmadan önce geçmişe göre kendi başına anlamlı bir soruya dönüştürülür (query rewriting), böylece veritabanında doğru parçalar bulunur. Geçmiş, bağlam penceresini taşırmasın diye son N mesajla sınırlanır
 - **Konu uyumu kontrolü**: getirilen bağlam, sorulan konuyla örtüşmüyorsa model bunu doğruymuş gibi sunmak yerine açıkça belirtir
-- **Otomatik testler + CI**: kritik fonksiyonlar için yazılmış pytest testleri, her `git push`'ta GitHub Actions üzerinden otomatik çalışır; testler Linux/Mac/Windows'ta çalıştırılabilir
+- **Otomatik testler + CI**: PDF işleme, tekrar-ekleme kontrolü, RAG zinciri (sahte model + bellekteki Chroma ile), sohbet geçmişi ve ayarlar için 50+ pytest testi; her `git push`'ta GitHub Actions üzerinde Ubuntu ve Windows'ta çalışır, kod ayrıca `ruff` ile denetlenir. Testler Ollama gerektirmez
 - **LCEL (LangChain Expression Language)** mimarisiyle kurulmuş modern RAG zinciri
 - `ChatOllama` ile chat-formatlı prompt kullanımı (sistem/kullanıcı rolleri)
 - Sistem promptu ile **her koşulda Türkçe yanıt** garantisi — bağlam İngilizce olsa bile
-- Model, dizin, bağlam penceresi ve retriever ayarlarının `config.py` üzerinden merkezi yönetimi
-- Anlaşılır Türkçe hata mesajları, `raise ... from e` ile korunmuş hata zinciri
+- Model, dizin, chunk boyutu, bağlam penceresi, retriever ve geçmiş ayarlarının `config.py` üzerinden merkezi yönetimi; her ayar koda dokunmadan **ortam değişkeniyle** de değiştirilebilir
+- Web arayüzü ve CLI **aynı RAG çekirdeğini** (`rag_zinciri.py`) kullanır; prompt ve zincir tek bir yerde tanımlıdır
+- Anlaşılır Türkçe hata mesajları, aşamaya özel hata sınıfları (`PdfOkumaHatasi`, `VeritabaniHatasi`, `ModelHatasi`), `raise ... from e` ile korunmuş hata zinciri; CLI hata durumunda `1` çıkış koduyla biter
+- Web arayüzünden yüklenen dosya adları temizlenir (`../../` gibi klasör dışına yazma denemeleri engellenir)
 
 ---
 
@@ -37,18 +39,24 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 ```
 .
 ├── app.py                    # Streamlit web arayüzü: PDF yükleme + sohbet, tarayıcı üzerinden
+├── rag_zinciri.py            # Ortak RAG çekirdeği: modeller, promptlar, zincir, geçmiş kırpma, hata sınıfları
 ├── rag_motoru.py             # PDF'leri işleyip vektör veritabanını oluşturan/güncelleyen script (CLI)
 ├── soru_cevap.py             # Terminalden tek seferlik soru veya interaktif sohbet modu; kaynak gösterir
-├── config.py                 # Model isimleri, dizin, bağlam penceresi ve retriever ayarları (tek nokta)
-├── tests/                    # Ollama'ya bağımlı olmayan mantık için pytest testleri
+├── config.py                 # Tüm ayarlar (tek nokta); ortam değişkenleriyle değiştirilebilir
+├── tests/                    # Ollama'ya bağımlı olmayan pytest testleri
+│   ├── conftest.py           # Ortak test yardımcıları (sahte embedding, bellekteki Chroma)
+│   ├── test_config.py
 │   ├── test_rag_motoru.py
+│   ├── test_rag_zinciri.py
 │   └── test_soru_cevap.py
 ├── testleri_calistir.sh      # Testleri, sistem kaynaklı plugin sorunlarından bağımsız çalıştıran script (Linux/Mac)
 ├── testleri_calistir.py      # Aynı işi yapan, Windows dahil her platformda çalışan Python karşılığı
 ├── pytest.ini                # pytest yapılandırması
 ├── .github/workflows/
 │   └── tests.yml             # Her push'ta testleri otomatik çalıştıran GitHub Actions tanımı
-├── requirements.txt          # Çalışan ortamın gerçek bağımlılık sürümleri (pip freeze --local)
+├── requirements.in           # Projenin doğrudan kullandığı paketler (elle düzenlenen kısa liste)
+├── requirements.txt          # Tüm bağımlılıkların test edilmiş, sabitlenmiş sürümleri (kurulumda bunu kullanın)
+├── ruff.toml                 # Kod denetleyici (linter) ayarları
 ├── .gitignore                # venv/, chroma_db/, web_chroma_db/, yuklenen_pdfler/, __pycache__/ hariç tutulur
 ├── chroma_db/                # CLI'nin vektör veritabanı (otomatik oluşur, repoya dahil edilmez)
 ├── web_chroma_db/            # Web arayüzünün kendi vektör veritabanı (otomatik oluşur, repoya dahil edilmez)
@@ -62,7 +70,7 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 
 ## ⚙️ Gereksinimler
 
-- Python 3.9+
+- Python 3.10+
 - [Ollama](https://ollama.com) kurulu ve çalışır durumda
 - Aşağıdaki Ollama modelleri indirilmiş olmalı:
   ```bash
@@ -76,23 +84,21 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 pip install -r requirements.txt
 ```
 
-`requirements.txt` içinde önemli olan paketler:
+Projenin **doğrudan** kullandığı paketler `requirements.in` dosyasında listelenir:
 
 ```txt
-langchain
-langchain-classic       # create_retrieval_chain, create_stuff_documents_chain
 langchain-core
-langchain-text-splitters
-langchain-community     # PyPDFLoader
-langchain-ollama        # OllamaEmbeddings, ChatOllama
-langchain-chroma        # Chroma (otomatik persist eden yeni nesil paket)
+langchain-classic        # create_retrieval_chain, create_history_aware_retriever, create_stuff_documents_chain
+langchain-text-splitters # RecursiveCharacterTextSplitter
+langchain-ollama         # OllamaEmbeddings, ChatOllama
+langchain-chroma         # Chroma (otomatik persist eden yeni nesil paket)
 chromadb
-pypdf
-streamlit               # web arayüzü
-pytest                  # testler
+pypdf                    # PDF okuma
+streamlit                # web arayüzü
+pytest                   # testler
 ```
 
-> 💡 Bu dosya, proje için oluşturulmuş **izole bir sanal ortamda** `pip freeze --local` ile üretilmiştir. `--local` bayrağı önemlidir: sistem genelinde kurulu başka paketlerin (örn. ROS2 gibi) listeye sızmasını engeller ve sadece bu projeye ait bağımlılıkları listeler.
+> 💡 `requirements.txt` ise bu paketlerin **tüm alt bağımlılıklarıyla birlikte** test edilmiş sürümlere sabitlenmiş halidir (uzun görünmesi normaldir; örn. `kubernetes`, `chromadb`'nin bir alt bağımlılığıdır). İzole bir sanal ortamda `pip freeze --local` ile üretilmiştir; `--local` bayrağı sistem genelindeki paketlerin (örn. ROS2) listeye sızmasını engeller. Yeni bir paket eklerken önce `requirements.in`'e yazın, kurun, sonra `requirements.txt`'yi yeniden üretin.
 
 ---
 
@@ -112,13 +118,23 @@ pytest                  # testler
    ```bash
    ollama serve
    ```
-5. `config.py` içindeki ayarları kendi kurulumunuza göre kontrol edin:
-   ```python
-   EMBED_MODEL = "nomic-embed-text"
-   LLM_MODEL = "llama3"
-   DB_DIR = "./chroma_db"
-   RETRIEVER_K = 2
-   NUM_CTX = 8192   # modelin bağlam penceresi (token); yüksek k değerleriyle çalışırken büyütülür
+5. `config.py` içindeki varsayılan ayarları kontrol edin. Her ayar, koda dokunmadan aynı isimli ortam değişkeniyle de değiştirilebilir:
+
+   | Ayar | Varsayılan | Ortam değişkeni | Açıklama |
+   |---|---|---|---|
+   | `EMBED_MODEL` | `nomic-embed-text` | `RAG_EMBED_MODEL` | Embedding modeli |
+   | `LLM_MODEL` | `llama3` | `RAG_LLM_MODEL` | Sohbet modeli |
+   | `DB_DIR` | `chroma_db` | `RAG_DB_DIR` | CLI'nin veritabanı klasörü |
+   | `WEB_DB_DIR` | `web_chroma_db` | `RAG_WEB_DB_DIR` | Web arayüzünün veritabanı klasörü |
+   | `UPLOAD_KLASORU` | `yuklenen_pdfler` | `RAG_UPLOAD_KLASORU` | Web'den yüklenen PDF'lerin kopyaları |
+   | `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1000` / `200` | `RAG_CHUNK_SIZE` / `RAG_CHUNK_OVERLAP` | Parça boyutu ve örtüşmesi (karakter) |
+   | `RETRIEVER_K` | `4` | `RAG_RETRIEVER_K` | Her soruda getirilecek parça sayısı (web'de kaydırıcının varsayılanı) |
+   | `NUM_CTX` | `8192` | `RAG_NUM_CTX` | Modelin bağlam penceresi (token); yüksek k değerlerinde büyütün |
+   | `GECMIS_MAX_MESAJ` | `10` | `RAG_GECMIS_MAX_MESAJ` | Modele gönderilecek en fazla geçmiş mesaj (1 soru + 1 cevap = 2) |
+
+   Göreli klasör yolları, komutun nereden çalıştırıldığından bağımsız olarak **proje klasörüne** göre çözülür. Örnek:
+   ```bash
+   RAG_LLM_MODEL=mistral RAG_RETRIEVER_K=6 streamlit run app.py
    ```
 
 ---
@@ -139,9 +155,9 @@ Terminalde çıkan `Local URL` (genelde `http://localhost:8501`) tarayıcıda ot
 
 1. Sayfa ilk açıldığında henüz hiçbir PDF eklenmemiştir; sohbet kutusu görünmez, sadece "önce PDF ekleyin" mesajı vardır.
 2. Sol kenar çubuğundan bir veya birden fazla PDF seçin, **"➕ Veritabanına Ekle"** butonuna basın.
-3. Ekleme bittiğinde dosya adı, kaç parçaya bölündüğüyle birlikte kalıcı bir ✅ onay satırı olarak sidebar'da görünür (sayfa yenilense de kaybolmaz).
+3. Ekleme bittiğinde dosya adı, kaç parçaya bölündüğüyle birlikte kalıcı bir ✅ onay satırı olarak sidebar'da görünür (sayfa yenilense de kaybolmaz). Aynı içerikteki bir dosya tekrar yüklenirse eklenmez ve bilgi mesajı gösterilir; **aynı isimde ama farklı içerikte** bir dosya yüklenirse karışıklık olmasın diye eklenmez, yeniden adlandırmanız istenir. Eklenemeyen dosyalar (bozuk/şifreli/taranmış PDF) için hata mesajı gösterilir.
 4. Artık ana ekranda sohbet kutusu açılır; sorularınızı yazabilirsiniz.
-5. Her cevabın altında, hangi dosya/sayfadan geldiği (📚 Kaynaklar) gösterilir.
+5. Cevap, model ürettikçe akış halinde ekrana yazılır; altında hangi dosya/sayfadan geldiği (📚 Kaynaklar) gösterilir. Kaynaklar sohbet geçmişindeki eski cevaplarda da kalıcıdır.
 
 **Sidebar'daki diğer kontroller:**
 
@@ -174,7 +190,9 @@ python rag_motoru.py --pdf cv.pdf rapor.pdf sunum.pdf
 |---|---|---|
 | `--pdf` | ✅ | İşlenecek bir veya birden fazla PDF dosyasının yolu |
 
-> ℹ️ `chroma_db` klasörü zaten varsa script hata vermez; yeni verilen dosyaları **mevcut veritabanına ekler**. Bir dosya zaten veritabanında ise (aynı yol/isimle önceden eklenmişse) otomatik olarak atlanır, tekrar işlenmez.
+> ℹ️ `chroma_db` klasörü zaten varsa script hata vermez; yeni verilen dosyaları **mevcut veritabanına ekler**. Bir dosya zaten veritabanında ise otomatik olarak atlanır, tekrar işlenmez. `cv.pdf`, `./cv.pdf` ve tam yol aynı dosya sayılır; içerik özeti de karşılaştırıldığı için aynı dosyanın başka bir klasördeki kopyası da atlanır.
+>
+> Birden fazla dosya verildiğinde birindeki hata (örn. dosya bulunamadı, bozuk PDF) diğerlerinin işlenmesini engellemez; sonda başarısız dosyalar listelenir ve script `1` çıkış koduyla biter (otomasyon/script içinde hatayı yakalayabilmeniz için). Her şey yolundaysa çıkış kodu `0`'dır.
 >
 > Veritabanını tamamen sıfırlamak isterseniz:
 > ```bash
@@ -210,7 +228,7 @@ Sen: q
 Görüşürüz! 👋
 ```
 
-Çıkmak için `q`, `quit`, `exit` veya `çık` yazabilirsiniz (`Ctrl+C` ile de çıkılabilir).
+Çıkmak için `q`, `quit`, `exit` veya `çık` yazabilirsiniz (`Ctrl+C` ile de çıkılabilir). Sohbet sırasında tek bir soruda hata olursa (örn. Ollama bir anlığına yanıt vermezse) sohbet kapanmaz ve geçmiş kaybolmaz; hata gösterilir ve yeni soru sorabilirsiniz.
 
 Örnek çıktı:
 
@@ -230,7 +248,14 @@ Adayın projeleri şunlardır:
 
 ## 🧪 Testler ve CI
 
-Proje, Ollama'ya bağımlı olmayan (yani gerçek bir model çalıştırmadan test edilebilen) mantık için otomatik testler içerir: `kaynaklari_listele` (kaynak gösterme mantığı) ve `dosya_zaten_islendi_mi` (çoklu PDF'de tekrar-eklenmeyi önleme mantığı).
+Testlerin hiçbiri Ollama gerektirmez: embedding için `langchain_core`'un deterministik sahte embedding'i, LLM için sahte sohbet modeli (`FakeListChatModel`) kullanılır, Chroma ise bellekte çalışır. Böylece CI'da bile **tüm RAG zinciri uçtan uca** test edilebilir. Kapsanan başlıca konular:
+
+| Dosya | Neyi test eder |
+|---|---|
+| `test_rag_motoru.py` | `ornek.pdf` ile PDF okuma/parçalama ve metadata, bozuk/metinsiz/olmayan PDF hataları, tekrar-ekleme kontrolü (göreli/mutlak yol, aynı içerikli kopya, eski sürüm kayıtları), dosya adı temizleme, CLI çıkış kodları |
+| `test_rag_zinciri.py` | Kaynak listeleme, geçmiş kırpma, ilk soruda doğrudan arama, takip sorusunda **sorunun yeniden yazılıp öyle aranması**, akış (stream) çıktısı, gerçek Chroma ile zincir |
+| `test_soru_cevap.py` | Hata sonrası sohbetin devam etmesi, başarısız sorunun geçmişe yazılmaması, kırpılmış geçmişin gönderilmesi, veritabanı yokken anlaşılır hata |
+| `test_config.py` | Varsayılanlar, ortam değişkeniyle ayar ezme, geçersiz değerlerin anlaşılır hatası |
 
 **Testleri yerel olarak çalıştırmak için:**
 
@@ -245,37 +270,29 @@ Proje, Ollama'ya bağımlı olmayan (yani gerçek bir model çalıştırmadan te
 
 Her iki script de aynı korumayı sağlar: pytest'in başlangıçta sistem genelindeki paketleri (örn. ROS2 kurulu makinelerde olduğu gibi) otomatik eklenti (plugin) olarak yüklemeye çalışmasını engeller, aksi halde ilgisiz bir hata alınabilir.
 
-Beklenen çıktı:
+Beklenen çıktının sonu:
 
 ```
-collected 7 items
-
-tests/test_rag_motoru.py::test_dosya_veritabaninda_varsa_true_doner PASSED
-tests/test_rag_motoru.py::test_dosya_veritabaninda_yoksa_false_doner PASSED
-tests/test_soru_cevap.py::test_tek_dosya_tek_sayfa PASSED
-tests/test_soru_cevap.py::test_sayfa_numarasi_birle_basliyor PASSED
-tests/test_soru_cevap.py::test_tekrarlanan_kaynaklar_temizlenir PASSED
-tests/test_soru_cevap.py::test_farkli_klasordeki_ayni_isimli_dosya PASSED
-tests/test_soru_cevap.py::test_bos_liste PASSED
-
-7 passed
+============================== 52 passed in 1.2s ==============================
 ```
 
-**CI (GitHub Actions):** `.github/workflows/tests.yml` sayesinde, bu depoya her `git push` yapıldığında aynı testler GitHub'ın kendi sunucusunda (sıfırdan, temiz bir Ubuntu ortamında) otomatik olarak çalışır. Sonuç, repo'nun **Actions** sekmesinde ✅ (geçti) veya ❌ (başarısız) olarak görülebilir — bu sayede bir değişiklik kritik bir fonksiyonu bozarsa, kod canlıya/kullanıma geçmeden önce fark edilir.
+**Kod denetimi (lint):** `pip install ruff` ile kurup `ruff check .` çalıştırabilirsiniz (ayarlar `ruff.toml` içinde).
+
+**CI (GitHub Actions):** `.github/workflows/tests.yml` sayesinde, bu depoya her `git push` yapıldığında kod önce `ruff` ile denetlenir, ardından testler GitHub'ın kendi sunucularında (sıfırdan, temiz **Ubuntu ve Windows** ortamlarında) otomatik olarak çalışır. Sonuç, repo'nun **Actions** sekmesinde ✅ (geçti) veya ❌ (başarısız) olarak görülebilir — bu sayede bir değişiklik kritik bir fonksiyonu bozarsa, kod canlıya/kullanıma geçmeden önce fark edilir.
 
 ---
 
 ## 🛠️ Nasıl Çalışır?
 
-1. **Yükleme:** `PyPDFLoader` ile her PDF sayfa sayfa okunur.
-2. **Bölme:** `RecursiveCharacterTextSplitter` ile metin, 1000 karakterlik ve 200 karakter üst üste binen (overlap) parçalara bölünür.
+1. **Yükleme:** `pypdf` ile her PDF sayfa sayfa okunur. Metin içermeyen (taranmış) veya bozuk PDF'ler anlaşılır bir hatayla reddedilir.
+2. **Bölme:** `RecursiveCharacterTextSplitter` ile metin, varsayılan olarak 1000 karakterlik ve 200 karakter üst üste binen (overlap) parçalara bölünür (`CHUNK_SIZE` / `CHUNK_OVERLAP`).
 3. **Embedding:** Her parça, Ollama'nın `nomic-embed-text` modeli ile vektöre dönüştürülür.
-4. **Saklama:** Vektörler `langchain-chroma` paketiyle otomatik olarak kalıcı yazılır. Veritabanı zaten varsa, yeni parçalar `add_documents` ile üstüne eklenir; her dosya için önce `source` metadata'sına bakılarak zaten işlenip işlenmediği kontrol edilir.
-5. **Zincir Kurulumu (LCEL):** `create_stuff_documents_chain` ile bir cevap-üretme zinciri, `create_retrieval_chain` ile de bu zinciri retriever'a bağlayan tam RAG zinciri oluşturulur. Prompt'a eklenen `MessagesPlaceholder("chat_history")` sayesinde zincir, önceki konuşmayı da görebilir.
+4. **Saklama:** Vektörler `langchain-chroma` paketiyle otomatik olarak kalıcı yazılır. Her parçanın metadata'sında dosyanın tam yolu (`source`), sayfa numarası (`page`) ve içerik özeti (`dosya_hash`) saklanır. Her dosya için önce bu alanlara bakılarak zaten işlenip işlenmediği kontrol edilir.
+5. **Zincir Kurulumu (LCEL, `rag_zinciri.py`):** `create_history_aware_retriever` ile sohbet geçmişine duyarlı bir retriever, `create_stuff_documents_chain` ile bir cevap-üretme zinciri, `create_retrieval_chain` ile de ikisini birleştiren tam RAG zinciri oluşturulur. Web arayüzü ve CLI aynı fonksiyonu kullanır.
 6. **Sorgulama:** Kullanıcının sorusu, en alakalı `k` parça ile birlikte `ChatOllama` üzerinden `llama3` modeline chat formatında (`system`/`human` rolleri) gönderilir.
 7. **Dil Kontrolü:** Sistem promptu, bağlam İngilizce olsa dahi modelin **daima Türkçe** yanıt vermesini zorunlu kılar.
 8. **Kaynak Çıkarımı:** Retriever'ın döndürdüğü doküman parçalarının `metadata['source']` ve `metadata['page']` alanları okunarak, cevabın altına hangi dosya/sayfadan geldiği eklenir (tekrarlar temizlenir).
-9. **Sohbet Hafızası:** Her soru-cevap çifti, `HumanMessage`/`AIMessage` olarak `chat_history` listesine eklenir ve bir sonraki soruda prompt'a dahil edilir. Not: hafıza şu an sadece cevap üretiminde kullanılır; retriever'ın veritabanından hangi parçaları çekeceği hâlâ sadece o anki soruya bakar (geçmişe göre sorgu yeniden yazımı henüz yok).
+9. **Sohbet Hafızası ve Soru Yeniden Yazma:** Her soru-cevap çifti, `HumanMessage`/`AIMessage` olarak `chat_history` listesine eklenir. Geçmiş varsa, soru önce modele "geçmişi görmeyen birinin de anlayacağı tek bir soruya" dönüştürülür (örn. *"Onun üniversitesi neresi?"* → *"Hakan Efe Tüysüz'ün okuduğu üniversite neresi?"*) ve veritabanında bu soru aranır. İlk soruda bu adım atlanır, ek model çağrısı yapılmaz. Modele giden geçmiş son `GECMIS_MAX_MESAJ` mesajla sınırlanır.
 10. **Konu Uyumu Kontrolü:** Sistem promptu, getirilen bağlamın sorulan konuyla örtüşüp örtüşmediğini modelin kendisine kontrol ettirir; örtüşmüyorsa model bunu açıkça belirtip yanlış konuyu doğruymuş gibi sunmaktan kaçınır. Bu, retrieval'ın kendisini iyileştirmez, sadece yanlış eşleşmelerin fark edilmesini sağlar.
 
 ---
@@ -285,8 +302,11 @@ tests/test_soru_cevap.py::test_bos_liste PASSED
 | Hata Mesajı / Durum | Olası Sebep | Çözüm |
 |---|---|---|
 | `Belirtilen '...' dosyası bulunamadı!` | PDF yolu yanlış | Dosya yolunu ve adını kontrol edin |
-| `Vektör veritabanı oluşturulamadı. Ollama servisi çalışıyor mu?` | Ollama arka planda çalışmıyor | `ollama serve` komutunu çalıştırın |
-| `Vektör veritabanı bulunamadı!` | Önce `rag_motoru.py` çalıştırılmamış | Önce PDF'leri işleyip veritabanını oluşturun |
+| `'...' modeli yüklenemedi. Ollama çalışıyor mu ...?` | Ollama arka planda çalışmıyor veya model indirilmemiş | `ollama serve` çalıştırın, mesajdaki `ollama pull ...` komutuyla modeli indirin; web arayüzünde ardından sayfayı yenileyin |
+| `Vektör veritabanı bulunamadı!` / `veritabanı boş!` | Önce `rag_motoru.py` çalıştırılmamış veya hiç PDF eklenmemiş | Önce PDF'leri işleyip veritabanını oluşturun |
+| `... içinden hiç metin çıkarılamadı. Taranmış (görsel) bir PDF olabilir` | PDF sadece görüntüden oluşuyor; proje OCR yapmıyor | PDF'i önce bir OCR aracıyla (örn. `ocrmypdf`) metin içeren hale getirin |
+| `... PDF olarak okunamadı (bozuk veya şifreli olabilir)` | Dosya bozuk, PDF değil veya parola korumalı | Dosyayı kontrol edin; şifreliyse parolasını kaldırıp tekrar deneyin |
+| Web'de `'...' adında, içeriği farklı bir dosya zaten ekli` | Aynı isimli farklı bir dosya daha önce eklenmiş | Yeni dosyayı yeniden adlandırıp tekrar yükleyin |
 | `ModuleNotFoundError: No module named 'langchain.chains'` | LangChain 1.x kurulu; eski chain fonksiyonları `langchain_classic`'e taşındı | `pip install langchain-classic` kurup importları `langchain_classic.chains`'ten yapın |
 | `AttributeError: 'Chroma' object has no attribute 'persist'` | Yeni `langchain-chroma` paketinde `.persist()` kaldırıldı (otomatik persist var) | Kodda `.persist()` çağrısını silin |
 | Model konu dışı/rol yapan cevaplar veriyor | `OllamaLLM` (completion modeli) ile `ChatPromptTemplate` (chat formatı) uyumsuzluğu | `OllamaLLM` yerine `ChatOllama` kullanın |
@@ -299,7 +319,7 @@ tests/test_soru_cevap.py::test_bos_liste PASSED
 | `fontTools is required to fully parse...` uyarısı | PDF'in kendi font kodlaması eksik meta veri içeriyor | Zararsızdır, metin okumayı etkilemez; isterseniz `pip install fonttools` ile giderebilirsiniz |
 | Cevap üretimi çok yavaş | Modelin çalıştığı makinenin kaynakları yetersiz kalıyor | Daha küçük/hafif bir model deneyin |
 | `requirements.txt` çok uzun/ilgisiz paketler içeriyor | `pip freeze` sistem genelindeki başka paketleri de yakalamış olabilir | Temiz bir venv içinde `pip freeze --local > requirements.txt` çalıştırın |
-| `pytest tests/` çalıştırınca `PluginValidationError` veya `ModuleNotFoundError: No module named 'lark'` gibi ilgisiz hatalar | pytest, `PYTHONPATH`'e sızmış sistem paketlerini (örn. ROS2) eklenti sanıp yüklemeye çalışıyor | Doğrudan `pytest` yerine `./testleri_calistir.sh` (veya Windows'ta `python testleri_calistir.py`) kullanın |
+| `pytest` çalıştırınca `PluginValidationError` veya `ModuleNotFoundError: No module named 'lark'` gibi ilgisiz hatalar | pytest, `PYTHONPATH`'e sızmış sistem paketlerini (örn. ROS2) eklenti sanıp yüklemeye çalışıyor | Doğrudan `pytest` yerine `./testleri_calistir.sh` (veya Windows'ta `python testleri_calistir.py`) kullanın |
 
 ---
 
@@ -307,15 +327,17 @@ tests/test_soru_cevap.py::test_bos_liste PASSED
 
 - Bu proje tamamen **yerel** çalışır; internet bağlantısı sadece ilk kurulumda Ollama modellerini indirmek için gereklidir.
 - Web arayüzü ve CLI **birbirinden ayrı veritabanları** kullanır; birinde eklediğiniz PDF diğerinde görünmez, bu bilinçli bir tasarım kararıdır.
-- **Sohbet hafızası** sadece cevap üretiminde kullanılır; retrieval (hangi PDF parçalarının bulunacağı) hâlâ o anki soruya göre yapılır. Uzun sohbetlerde önceki bağlamla ilgili parçaların retriever tarafından tekrar bulunamaması mümkündür.
+- **Soru yeniden yazma** modelin kendisi tarafından yapılır; çoğu zaman doğru çalışsa da küçük modellerde bazen soruyu gereğinden fazla değiştirebilir. Ayrıca geçmiş olan her soruda ek bir model çağrısı yapıldığı için takip soruları biraz daha yavaştır.
+- Modele sadece son `GECMIS_MAX_MESAJ` mesaj gönderilir; çok uzun sohbetlerde en eski konuşmalar "unutulur" (bu, bağlam penceresinin taşmaması için bilinçli bir sınırdır).
+- **OCR yoktur**: taranmış/görsel PDF'lerden metin çıkarılamaz, bu dosyalar anlaşılır bir hatayla reddedilir.
 - **Konu uyumu kontrolü** bir güvence değil, bir azaltma önlemidir: model hâlâ, özellikle kurnaz/varsayım içeren sorularda ("X ile Y arasında bağlantı var mı?" gibi), zorlama bir bağlantı kurabilir. Kritik kullanımlarda cevapları her zaman kaynak sayfalarıyla çarpraz kontrol edin.
-- **Testler** şu an sadece Ollama'ya bağımlı olmayan mantığı kapsıyor; embedding/LLM üretimi gibi kısımlar otomatik test edilmiyor (bunun için Ollama'nın CI ortamında çalışması gerekirdi).
+- **Testler** zincirin tamamını sahte embedding ve sahte LLM ile test eder; gerçek modellerin **cevap kalitesi** otomatik test edilmez (bunun için Ollama'nın CI ortamında çalışması gerekirdi).
 - Cevap kalitesi kullanılan LLM modeline (`llama3`), chunk boyutuna, `RETRIEVER_K` (veya web arayüzündeki k kaydırıcısı) ve `NUM_CTX` değerine göre değişebilir.
 - Proje, LangChain'in hızlı sürüm geçişlerine (0.1 → 0.3 → 1.x) uyum sağlayacak şekilde güncel tutulmuştur; `langchain_classic` gibi paket taşımalarını takip etmek gelecekte de gerekebilir.
-- Planlanan sonraki geliştirmeler: retrieval'ın sohbet geçmişine göre sorguyu yeniden yazması (query rewriting).
+- Planlanan sonraki geliştirmeler: büyük PDF'lerde embedding'in paralel/toplu yapılması, OCR desteği.
 
 ---
 
 ## 📄 Lisans
 
-Bu proje dilediğiniz gibi kullanılabilir. Bir lisans eklemek isterseniz [MIT Lisansı](https://opensource.org/licenses/MIT) önerilir.
+Bu proje [MIT Lisansı](LICENSE) ile lisanslanmıştır.
