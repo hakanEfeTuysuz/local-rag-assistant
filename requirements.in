@@ -1,0 +1,12 @@
+# Projenin DOĞRUDAN kullandığı paketler (elle düzenlenen liste).
+# requirements.txt ise bunların tüm alt bağımlılıklarıyla birlikte, test edilmiş
+# sürümlere sabitlenmiş halidir; kurulum için onu kullanın.
+langchain-core
+langchain-classic        # create_retrieval_chain, create_history_aware_retriever, create_stuff_documents_chain
+langchain-text-splitters # RecursiveCharacterTextSplitter
+langchain-ollama         # OllamaEmbeddings, ChatOllama
+langchain-chroma         # Chroma (otomatik persist eden yeni nesil paket)
+chromadb
+pypdf                    # PDF okuma
+streamlit                # web arayüzü
+pytest                   # testler

@@ -12,3 +12,6 @@ env/
 chroma_db/
 web_chroma_db/
 yuklenen_pdfler/
+# Araç önbellekleri
+.pytest_cache/
+.ruff_cache/

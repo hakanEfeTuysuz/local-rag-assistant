@@ -1,0 +1,10 @@
+# Ruff (linter) ayarları — CI'da her push'ta çalışır: `ruff check .`
+line-length = 140
+target-version = "py310"
+extend-exclude = ["venv", "chroma_db", "web_chroma_db", "yuklenen_pdfler"]
+
+[lint]
+# E/W: stil hataları, F: kullanılmayan import/değişken gibi gerçek hatalar,
+# I: import sıralaması, B: yaygın hata kalıpları, UP: eski Python sözdizimi
+select = ["E", "W", "F", "I", "B", "UP"]
+ignore = ["E501"]  # uzun Türkçe prompt satırları bilinçli

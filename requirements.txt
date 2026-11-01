@@ -30,7 +30,6 @@ httpcore==1.0.9
 httpcore2==2.12.0
 httptools==0.8.0
 httpx==0.28.1
-httpx-sse==0.4.3
 httpx2==2.12.0
 huggingface_hub==1.30.0
 humanfriendly==10.0
@@ -44,18 +43,12 @@ jsonpointer==3.1.1
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 kubernetes==36.0.3
-langchain==1.4.0
 langchain-chroma==1.1.0
 langchain-classic==1.0.8
-langchain-community==0.4.2
 langchain-core==1.6.2
 langchain-ollama==1.1.0
 langchain-protocol==0.0.19
 langchain-text-splitters==1.1.2
-langgraph==1.2.11
-langgraph-checkpoint==4.2.0
-langgraph-prebuilt==1.1.0
-langgraph-sdk==0.4.4
 langsmith==0.12.2
 markdown-it-py==4.2.0
 MarkupSafe==3.0.3
@@ -75,7 +68,6 @@ opentelemetry-proto==1.44.0
 opentelemetry-sdk==1.44.0
 opentelemetry-semantic-conventions==0.65b0
 orjson==3.12.0
-ormsgpack==1.12.2
 overrides==7.7.0
 packaging==26.3
 pandas==2.3.3

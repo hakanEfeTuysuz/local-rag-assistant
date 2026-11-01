@@ -11,9 +11,11 @@ projeyi kimin, hangi işletim sisteminde çalıştırdığından bağımsız hal
 Önemli: bu satır, 'import pytest' satırından ÖNCE çalışmalı.
 """
 import os
+
 os.environ.setdefault("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
 
 import sys
+
 import pytest
 
 if __name__ == "__main__":
