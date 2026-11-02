@@ -56,10 +56,7 @@ def dosya_listesini_cikar(vektor_db):
     parça geldiğini sayar. Liste her çalıştırmada veritabanından okunduğu için
     sayfa yenilense veya başka bir sekmede değişiklik yapılsa da günceldir.
     """
-    try:
-        kayitlar = vektor_db.get(include=["metadatas"])
-    except Exception:
-        return []
+    kayitlar = vektor_db.get(include=["metadatas"])
 
     dosyalar = {}
     for meta in kayitlar.get("metadatas") or []:
@@ -104,9 +101,16 @@ def pdfleri_ekle(yuklenen_dosyalar, mevcut_dosyalar):
         try:
             with open(dosya_yolu, "wb") as f:
                 f.write(icerik)
-            with st.spinner(f"'{ad}' işleniyor..."):
+            with st.spinner(f"'{ad}' okunuyor..."):
                 parcalar = pdf_hazirla(dosya_yolu)
-                vektor_veritabanina_kaydet(parcalar, vektor_db)
+            cubuk = st.progress(0.0, text=f"'{ad}' veritabanına ekleniyor...")
+            try:
+                vektor_veritabanina_kaydet(
+                    parcalar, vektor_db,
+                    ilerleme=lambda biten, toplam, ad=ad, cubuk=cubuk: cubuk.progress(biten / toplam, text=f"'{ad}': {biten}/{toplam} parça"),
+                )
+            finally:
+                cubuk.empty()
             mevcut_isimler.add(ad)
             mevcut_hashler.add(dosya_hash)
         except (RagHatasi, OSError) as hata:
@@ -140,7 +144,12 @@ if "chat_history" not in st.session_state:
 if "bildirimler" not in st.session_state:
     st.session_state.bildirimler = []
 
-dosyalar = dosya_listesini_cikar(vektor_db)
+try:
+    dosyalar = dosya_listesini_cikar(vektor_db)
+except Exception as hata:
+    # Veritabanı okunamıyorsa bunu "hiç PDF yok" gibi göstermek yanıltıcı olur
+    st.error(f"❌ Vektör veritabanı okunamadı ('{WEB_DB_DIR}'): {hata}")
+    st.stop()
 
 with st.sidebar:
     st.header("📄 PDF Ekle")

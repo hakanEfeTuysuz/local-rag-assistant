@@ -44,3 +44,8 @@ def test_gecersiz_sayi_anlasilir_hata_verir(config_yenile):
 def test_overlap_chunk_boyutundan_buyuk_olamaz(config_yenile):
     with pytest.raises(ValueError, match="CHUNK_OVERLAP"):
         config_yenile(RAG_CHUNK_SIZE="100", RAG_CHUNK_OVERLAP="100")
+
+
+def test_parti_boyutu_en_az_bir_olmali(config_yenile):
+    with pytest.raises(ValueError, match="EMBED_PARTI_BOYUTU"):
+        config_yenile(RAG_EMBED_PARTI_BOYUTU="0")

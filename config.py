@@ -52,10 +52,13 @@ CHUNK_OVERLAP = _ortamdan_oku("RAG_CHUNK_OVERLAP", 200, int)
 RETRIEVER_K = _ortamdan_oku("RAG_RETRIEVER_K", 4, int)  # Aramada getirilecek parça sayısı (web'de kaydırıcının varsayılanı)
 NUM_CTX = _ortamdan_oku("RAG_NUM_CTX", 8192, int)       # Ollama modelinin bağlam penceresi (token). Yüksek k değerlerinde büyütün.
 GECMIS_MAX_MESAJ = _ortamdan_oku("RAG_GECMIS_MAX_MESAJ", 10, int)  # Modele gönderilecek en fazla geçmiş mesaj (soru+cevap = 2 mesaj)
+EMBED_PARTI_BOYUTU = _ortamdan_oku("RAG_EMBED_PARTI_BOYUTU", 64, int)  # Embedding'e tek seferde gönderilecek parça sayısı
 
 if CHUNK_OVERLAP >= CHUNK_SIZE:
     raise ValueError("CHUNK_OVERLAP, CHUNK_SIZE'dan küçük olmalıdır.")
 if RETRIEVER_K < 1:
     raise ValueError("RETRIEVER_K en az 1 olmalıdır.")
+if EMBED_PARTI_BOYUTU < 1:
+    raise ValueError("EMBED_PARTI_BOYUTU en az 1 olmalıdır.")
 if GECMIS_MAX_MESAJ < 0:
     raise ValueError("GECMIS_MAX_MESAJ negatif olamaz.")

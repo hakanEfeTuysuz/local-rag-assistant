@@ -8,6 +8,7 @@ from rag_motoru import (
     dosya_zaten_islendi_mi,
     guvenli_dosya_adi,
     main,
+    parca_kimlikleri,
     pdf_hazirla,
     vektor_veritabanina_kaydet,
 )
@@ -123,6 +124,74 @@ def test_eski_surumun_goreli_yolu_da_bulunur(bellek_db, sahte_embeddings):
     from langchain_core.documents import Document
     bellek_db.add_documents([Document(page_content="eski kayıt", metadata={"source": "cv.pdf", "page": 0})])
     assert dosya_zaten_islendi_mi(bellek_db, "./cv.pdf") is True
+
+
+# --- vektor_veritabanina_kaydet: partiler, ilerleme, geri alma ------------
+
+class PartiDB:
+    """add_documents çağrılarını kaydeden; istenirse N. çağrıda hata veren sahte DB."""
+    def __init__(self, hata_verecek_cagri=None):
+        self.hata_verecek_cagri = hata_verecek_cagri
+        self.partiler = []
+        self.silinen = None
+
+    def add_documents(self, documents, ids):
+        if len(self.partiler) + 1 == self.hata_verecek_cagri:
+            raise ConnectionError("Ollama koptu")
+        self.partiler.append(list(ids))
+
+    def delete(self, ids):
+        self.silinen = list(ids)
+
+
+def _parcalar(adet, dosya_hash="abc"):
+    from langchain_core.documents import Document
+    return [Document(page_content=f"p{i}", metadata={"source": "x.pdf", "page": 0, "dosya_hash": dosya_hash}) for i in range(adet)]
+
+
+def test_parcalar_partiler_halinde_eklenir_ve_ilerleme_bildirilir():
+    db, ilerlemeler = PartiDB(), []
+    vektor_veritabanina_kaydet(_parcalar(5), db, ilerleme=lambda a, b: ilerlemeler.append((a, b)), parti_boyutu=2)
+    assert [len(p) for p in db.partiler] == [2, 2, 1]
+    assert ilerlemeler == [(2, 5), (4, 5), (5, 5)]
+
+
+def test_hata_olursa_eklenen_parcalar_geri_silinir():
+    db = PartiDB(hata_verecek_cagri=2)
+    with pytest.raises(VeritabaniHatasi):
+        vektor_veritabanina_kaydet(_parcalar(5), db, parti_boyutu=2)
+    assert db.silinen == parca_kimlikleri(_parcalar(5))  # yarım dosya veritabanında kalmaz
+
+
+def test_parca_kimlikleri_deterministiktir():
+    assert parca_kimlikleri(_parcalar(3)) == ["abc-0", "abc-1", "abc-2"]
+    from langchain_core.documents import Document
+    rastgele = parca_kimlikleri([Document(page_content="a"), Document(page_content="b")])
+    assert len(set(rastgele)) == 2
+
+
+def test_ayni_dosya_iki_kez_eklense_de_kopya_olusmaz(bellek_db, ornek_pdf):
+    parcalar = pdf_hazirla(ornek_pdf)
+    vektor_veritabanina_kaydet(parcalar, bellek_db)
+    vektor_veritabanina_kaydet(parcalar, bellek_db)
+    assert len(bellek_db.get(include=[])["ids"]) == len(parcalar)
+
+
+def test_yarida_kalan_ekleme_sonrasi_dosya_islenmemis_sayilir(bellek_db, ornek_pdf, monkeypatch):
+    parcalar = pdf_hazirla(ornek_pdf, chunk_size=300, chunk_overlap=50)
+    asil_ekle = bellek_db.add_documents
+    cagri = {"n": 0}
+
+    def ikinci_partide_bozul(docs, **kw):
+        cagri["n"] += 1
+        if cagri["n"] == 2:
+            raise ConnectionError("Ollama koptu")
+        return asil_ekle(docs, **kw)
+
+    monkeypatch.setattr(bellek_db, "add_documents", ikinci_partide_bozul)
+    with pytest.raises(VeritabaniHatasi):
+        vektor_veritabanina_kaydet(parcalar, bellek_db, parti_boyutu=2)
+    assert dosya_zaten_islendi_mi(bellek_db, ornek_pdf) is False  # tekrar denenebilir
 
 
 # --- guvenli_dosya_adi ------------------------------------------------------

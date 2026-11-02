@@ -3,12 +3,13 @@ import hashlib
 import logging
 import os
 import sys
+import uuid
 
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
-from config import CHUNK_OVERLAP, CHUNK_SIZE, DB_DIR  # MERKEZİ AYARLAR
+from config import CHUNK_OVERLAP, CHUNK_SIZE, DB_DIR, EMBED_PARTI_BOYUTU  # MERKEZİ AYARLAR
 from rag_zinciri import (
     PdfOkumaHatasi,
     RagHatasi,
@@ -58,6 +59,7 @@ def pdf_hazirla(dosya_yolu: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: in
         raise FileNotFoundError(f"Belirtilen '{dosya_yolu}' dosyası bulunamadı! Lütfen yolu kontrol edin.")
 
     kaynak = os.path.abspath(dosya_yolu)
+    ad = os.path.basename(dosya_yolu)  # hata mesajlarında sunucu yolunu değil sadece dosya adını göster
     try:
         dosya_hash = dosya_hash_hesapla(dosya_yolu)
         okuyucu = PdfReader(dosya_yolu)
@@ -70,7 +72,7 @@ def pdf_hazirla(dosya_yolu: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: in
             for i, sayfa in enumerate(okuyucu.pages)
         ]
     except Exception as e:
-        raise PdfOkumaHatasi(f"'{dosya_yolu}' PDF olarak okunamadı (bozuk veya şifreli olabilir). Detay: {e}") from e
+        raise PdfOkumaHatasi(f"'{ad}' PDF olarak okunamadı (bozuk veya şifreli olabilir). Detay: {e}") from e
     logger.info(f"-> Başarılı! PDF toplam {sayfa_sayisi} sayfa olarak okundu.\n")
 
     logger.info("2. Aşama: Metin parçalara bölünüyor (Chunking)...")
@@ -78,7 +80,7 @@ def pdf_hazirla(dosya_yolu: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: in
     parcalar = text_splitter.split_documents(dokumanlar)
     if not parcalar:
         raise PdfOkumaHatasi(
-            f"'{dosya_yolu}' içinden hiç metin çıkarılamadı. Taranmış (görsel) bir PDF olabilir; "
+            f"'{ad}' içinden hiç metin çıkarılamadı. Taranmış (görsel) bir PDF olabilir; "
             "bu proje OCR yapmadığı için sadece metin içeren PDF'leri işleyebilir."
         )
     logger.info(f"-> Başarılı! Metin toplam {len(parcalar)} anlamsal parçaya bölündü.\n")
@@ -107,14 +109,47 @@ def dosya_zaten_islendi_mi(vektor_db, dosya_yolu: str) -> bool:
     return len(sonuc.get("ids", [])) > 0
 
 
-def vektor_veritabanina_kaydet(parcalar: list[Document], vektor_db):
-    """Parçaları embedding'e çevirip veritabanına ekler (Chroma otomatik kalıcı yazar)."""
-    logger.info("3. Aşama: Parçalar embedding'e çevrilip veritabanına ekleniyor...")
+def parca_kimlikleri(parcalar: list[Document]) -> list[str]:
+    """
+    Her parça için kalıcı bir kimlik üretir: '<dosya_hash>-<sıra>'. Aynı dosya
+    tekrar eklenirse aynı kimlikler oluşur ve Chroma kopya oluşturmak yerine
+    üzerine yazar. Hash'i olmayan parçalarda (dışarıdan gelen Document'lar)
+    rastgele kimlik kullanılır.
+    """
+    return [
+        f"{p.metadata['dosya_hash']}-{i}" if p.metadata.get("dosya_hash") else uuid.uuid4().hex
+        for i, p in enumerate(parcalar)
+    ]
+
+
+def vektor_veritabanina_kaydet(parcalar: list[Document], vektor_db, ilerleme=None, parti_boyutu: int = EMBED_PARTI_BOYUTU):
+    """
+    Parçaları embedding'e çevirip veritabanına ekler (Chroma otomatik kalıcı yazar).
+
+    - Parçalar 'parti_boyutu'luk gruplar halinde gönderilir; her gruptan sonra
+      ilerleme(tamamlanan, toplam) çağrılır (büyük PDF'lerde ilerleme göstermek için).
+    - Bir grup başarısız olursa bu çağrıda eklenen tüm parçalar geri silinir.
+      Böylece yarım eklenmiş bir dosya sonraki denemede "zaten eklenmiş"
+      sanılıp eksik kalmaz; dosya baştan tekrar eklenebilir.
+    """
+    toplam = len(parcalar)
+    logger.info(f"3. Aşama: {toplam} parça embedding'e çevrilip veritabanına ekleniyor...")
+    kimlikler = parca_kimlikleri(parcalar)
     try:
-        vektor_db.add_documents(parcalar)
+        for bas in range(0, toplam, parti_boyutu):
+            son = min(bas + parti_boyutu, toplam)
+            vektor_db.add_documents(parcalar[bas:son], ids=kimlikler[bas:son])
+            if ilerleme is not None:
+                ilerleme(son, toplam)
+            if toplam > parti_boyutu:
+                logger.info(f"   ... {son}/{toplam} parça eklendi")
     except Exception as e:
+        try:
+            vektor_db.delete(ids=kimlikler)
+        except Exception as silme_hatasi:
+            logger.warning(f"Yarım kalan parçalar geri silinemedi: {silme_hatasi}")
         raise VeritabaniHatasi(f"Veritabanına ekleme yapılamadı. Ollama servisi çalışıyor mu? Detay: {e}") from e
-    logger.info(f"-> Başarılı! {len(parcalar)} yeni parça veritabanına eklendi.\n")
+    logger.info(f"-> Başarılı! {toplam} yeni parça veritabanına eklendi.\n")
     return vektor_db
 
 
