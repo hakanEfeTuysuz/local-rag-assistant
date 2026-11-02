@@ -1,5 +1,9 @@
 # 📚 Yerel RAG Asistanı (PDF + Ollama + LangChain)
 
+[![Testler](https://github.com/hakanEfeTuysuz/local-rag-assistant/actions/workflows/tests.yml/badge.svg)](https://github.com/hakanEfeTuysuz/local-rag-assistant/actions/workflows/tests.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+[![Lisans: MIT](https://img.shields.io/badge/lisans-MIT-green)](LICENSE)
+
 PDF dosyalarını okuyup vektör veritabanına kaydeden ve ardından bu veritabanı üzerinden **tamamen yerel** (internet gerektirmeyen) bir LLM ile soru-cevap yapabilen, LCEL mimarisiyle inşa edilmiş bir RAG (Retrieval Augmented Generation) sistemi. Tarayıcıda açılan bir **Streamlit web arayüzü** ile PDF yükleyip anında sohbet edebilir, isterseniz terminal (CLI) üzerinden de kullanabilirsiniz.
 
 Sistem, embedding ve dil modeli için [Ollama](https://ollama.com) kullanır; bu sayede verileriniz hiçbir zaman bilgisayarınızdan dışarı çıkmaz.
@@ -23,7 +27,7 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 - **Kaynak gösterme**: her cevabın altında, bilginin hangi PDF dosyasından ve hangi sayfadan geldiği listelenir
 - **Sohbet hafızası + soru yeniden yazma**: konuşma geçmişi hatırlanır; "onun", "bunun" gibi zamirler içeren sorular, arama yapılmadan önce geçmişe göre kendi başına anlamlı bir soruya dönüştürülür (query rewriting), böylece veritabanında doğru parçalar bulunur. Geçmiş, bağlam penceresini taşırmasın diye son N mesajla sınırlanır
 - **Konu uyumu kontrolü**: getirilen bağlam, sorulan konuyla örtüşmüyorsa model bunu doğruymuş gibi sunmak yerine açıkça belirtir
-- **Otomatik testler + CI**: PDF işleme, tekrar-ekleme kontrolü, RAG zinciri (sahte model + bellekteki Chroma ile), sohbet geçmişi ve ayarlar için 50+ pytest testi; her `git push`'ta GitHub Actions üzerinde Ubuntu ve Windows'ta çalışır, kod ayrıca `ruff` ile denetlenir. Testler Ollama gerektirmez
+- **Otomatik testler + CI**: PDF işleme, tekrar-ekleme kontrolü, RAG zinciri (sahte model + bellekteki Chroma ile), sohbet geçmişi ve ayarlar için 58 pytest testi; her `git push`'ta GitHub Actions üzerinde Ubuntu ve Windows'ta çalışır, kod ayrıca `ruff` ile denetlenir. Testler Ollama gerektirmez
 - **LCEL (LangChain Expression Language)** mimarisiyle kurulmuş modern RAG zinciri
 - `ChatOllama` ile chat-formatlı prompt kullanımı (sistem/kullanıcı rolleri)
 - Sistem promptu ile **her koşulda Türkçe yanıt** garantisi — bağlam İngilizce olsa bile
@@ -131,6 +135,9 @@ pytest                   # testler
    | `RETRIEVER_K` | `4` | `RAG_RETRIEVER_K` | Her soruda getirilecek parça sayısı (web'de kaydırıcının varsayılanı) |
    | `NUM_CTX` | `8192` | `RAG_NUM_CTX` | Modelin bağlam penceresi (token); yüksek k değerlerinde büyütün |
    | `GECMIS_MAX_MESAJ` | `10` | `RAG_GECMIS_MAX_MESAJ` | Modele gönderilecek en fazla geçmiş mesaj (1 soru + 1 cevap = 2) |
+   | `EMBED_PARTI_BOYUTU` | `64` | `RAG_EMBED_PARTI_BOYUTU` | Embedding'e tek seferde gönderilen parça sayısı (ilerleme bu adımlarla gösterilir) |
+
+   Ollama başka bir makinede/portta çalışıyorsa, Ollama'nın kendi `OLLAMA_HOST` ortam değişkenini kullanabilirsiniz (örn. `OLLAMA_HOST=http://192.168.1.10:11434`).
 
    Göreli klasör yolları, komutun nereden çalıştırıldığından bağımsız olarak **proje klasörüne** göre çözülür. Örnek:
    ```bash
@@ -252,7 +259,7 @@ Testlerin hiçbiri Ollama gerektirmez: embedding için `langchain_core`'un deter
 
 | Dosya | Neyi test eder |
 |---|---|
-| `test_rag_motoru.py` | `ornek.pdf` ile PDF okuma/parçalama ve metadata, bozuk/metinsiz/olmayan PDF hataları, tekrar-ekleme kontrolü (göreli/mutlak yol, aynı içerikli kopya, eski sürüm kayıtları), dosya adı temizleme, CLI çıkış kodları |
+| `test_rag_motoru.py` | `ornek.pdf` ile PDF okuma/parçalama ve metadata, bozuk/metinsiz/olmayan PDF hataları, tekrar-ekleme kontrolü (göreli/mutlak yol, aynı içerikli kopya, eski sürüm kayıtları), gruplar halinde ekleme + ilerleme, **yarıda kalan eklemenin geri alınması**, dosya adı temizleme, CLI çıkış kodları |
 | `test_rag_zinciri.py` | Kaynak listeleme, geçmiş kırpma, ilk soruda doğrudan arama, takip sorusunda **sorunun yeniden yazılıp öyle aranması**, akış (stream) çıktısı, gerçek Chroma ile zincir |
 | `test_soru_cevap.py` | Hata sonrası sohbetin devam etmesi, başarısız sorunun geçmişe yazılmaması, kırpılmış geçmişin gönderilmesi, veritabanı yokken anlaşılır hata |
 | `test_config.py` | Varsayılanlar, ortam değişkeniyle ayar ezme, geçersiz değerlerin anlaşılır hatası |
@@ -273,7 +280,7 @@ Her iki script de aynı korumayı sağlar: pytest'in başlangıçta sistem genel
 Beklenen çıktının sonu:
 
 ```
-============================== 52 passed in 1.2s ==============================
+============================== 58 passed in 1.3s ==============================
 ```
 
 **Kod denetimi (lint):** `pip install ruff` ile kurup `ruff check .` çalıştırabilirsiniz (ayarlar `ruff.toml` içinde).
@@ -287,7 +294,7 @@ Beklenen çıktının sonu:
 1. **Yükleme:** `pypdf` ile her PDF sayfa sayfa okunur. Metin içermeyen (taranmış) veya bozuk PDF'ler anlaşılır bir hatayla reddedilir.
 2. **Bölme:** `RecursiveCharacterTextSplitter` ile metin, varsayılan olarak 1000 karakterlik ve 200 karakter üst üste binen (overlap) parçalara bölünür (`CHUNK_SIZE` / `CHUNK_OVERLAP`).
 3. **Embedding:** Her parça, Ollama'nın `nomic-embed-text` modeli ile vektöre dönüştürülür.
-4. **Saklama:** Vektörler `langchain-chroma` paketiyle otomatik olarak kalıcı yazılır. Her parçanın metadata'sında dosyanın tam yolu (`source`), sayfa numarası (`page`) ve içerik özeti (`dosya_hash`) saklanır. Her dosya için önce bu alanlara bakılarak zaten işlenip işlenmediği kontrol edilir.
+4. **Saklama:** Vektörler `langchain-chroma` paketiyle otomatik olarak kalıcı yazılır. Her parçanın metadata'sında dosyanın tam yolu (`source`), sayfa numarası (`page`) ve içerik özeti (`dosya_hash`) saklanır. Her dosya için önce bu alanlara bakılarak zaten işlenip işlenmediği kontrol edilir. Parçalar `EMBED_PARTI_BOYUTU`'luk gruplar halinde eklenir ve ilerleme gösterilir (web'de ilerleme çubuğu, CLI'da `12/40 parça eklendi` satırları). Ekleme yarıda kesilirse (örn. Ollama çökerse) o dosyanın eklenen parçaları geri silinir; böylece yarım kalmış bir dosya "zaten eklenmiş" sanılmaz, tekrar eklenebilir. Parça kimlikleri içerik özetinden türetildiği için aynı dosya iki kez eklense bile kopya oluşmaz.
 5. **Zincir Kurulumu (LCEL, `rag_zinciri.py`):** `create_history_aware_retriever` ile sohbet geçmişine duyarlı bir retriever, `create_stuff_documents_chain` ile bir cevap-üretme zinciri, `create_retrieval_chain` ile de ikisini birleştiren tam RAG zinciri oluşturulur. Web arayüzü ve CLI aynı fonksiyonu kullanır.
 6. **Sorgulama:** Kullanıcının sorusu, en alakalı `k` parça ile birlikte `ChatOllama` üzerinden `llama3` modeline chat formatında (`system`/`human` rolleri) gönderilir.
 7. **Dil Kontrolü:** Sistem promptu, bağlam İngilizce olsa dahi modelin **daima Türkçe** yanıt vermesini zorunlu kılar.
@@ -315,7 +322,7 @@ Beklenen çıktının sonu:
 | Model, soruyla ilgisiz bir bağlamı sanki doğruymuş gibi anlatıyor | Retriever, soruya anlamsal olarak yakın ama konu olarak farklı bir parça getirmiş; model bunu fark etmemiş | Sistem promptundaki konu uyumu kontrolü bunu büyük ölçüde engeller; hâlâ olursa `k` değerini değiştirip tekrar deneyin |
 | `k` değeri yüksekken (örn. 10+) cevaplar kötüleşiyor/tutarsızlaşıyor | Modelin bağlam penceresi (`num_ctx`) aşılıp promptun bir kısmı sessizce kesiliyor | `config.py`'de `NUM_CTX` değerini büyütün (örn. 8192 veya 16384) |
 | Web arayüzünde eklenen PDF, programı yeniden başlatınca da duruyor | `web_chroma_db/` diske kalıcı yazıyor; bu bilinçli bir tasarım | İstediğinizde sidebar'daki "🗑️ Veritabanını Sıfırla" butonunu kullanın |
-| 288 sayfa gibi büyük PDF'lerde işlem uzun sürüyor | Her sayfa sırayla (paralel değil) embedding'e gönderiliyor | Sabırla bekleyin; ileride paralelleştirme eklenebilir |
+| 288 sayfa gibi büyük PDF'lerde işlem uzun sürüyor | Embedding yerel donanımda, gruplar halinde sırayla hesaplanıyor | İlerleme çubuğu/satırları üzerinden takip edip bekleyin; işlem yarıda kesilirse dosyayı tekrar eklemeniz yeterli |
 | `fontTools is required to fully parse...` uyarısı | PDF'in kendi font kodlaması eksik meta veri içeriyor | Zararsızdır, metin okumayı etkilemez; isterseniz `pip install fonttools` ile giderebilirsiniz |
 | Cevap üretimi çok yavaş | Modelin çalıştığı makinenin kaynakları yetersiz kalıyor | Daha küçük/hafif bir model deneyin |
 | `requirements.txt` çok uzun/ilgisiz paketler içeriyor | `pip freeze` sistem genelindeki başka paketleri de yakalamış olabilir | Temiz bir venv içinde `pip freeze --local > requirements.txt` çalıştırın |
@@ -334,7 +341,7 @@ Beklenen çıktının sonu:
 - **Testler** zincirin tamamını sahte embedding ve sahte LLM ile test eder; gerçek modellerin **cevap kalitesi** otomatik test edilmez (bunun için Ollama'nın CI ortamında çalışması gerekirdi).
 - Cevap kalitesi kullanılan LLM modeline (`llama3`), chunk boyutuna, `RETRIEVER_K` (veya web arayüzündeki k kaydırıcısı) ve `NUM_CTX` değerine göre değişebilir.
 - Proje, LangChain'in hızlı sürüm geçişlerine (0.1 → 0.3 → 1.x) uyum sağlayacak şekilde güncel tutulmuştur; `langchain_classic` gibi paket taşımalarını takip etmek gelecekte de gerekebilir.
-- Planlanan sonraki geliştirmeler: büyük PDF'lerde embedding'in paralel/toplu yapılması, OCR desteği.
+- Planlanan sonraki geliştirmeler: OCR desteği, cevap kalitesini ölçen küçük bir değerlendirme (eval) seti.
 
 ---
 
