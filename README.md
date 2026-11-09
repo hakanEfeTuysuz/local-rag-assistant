@@ -24,17 +24,19 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 - `nomic-embed-text` modeli ile embedding oluşturma
 - Embedding'leri **ChromaDB** içinde kalıcı olarak saklama (otomatik persist)
 - **Çoklu PDF desteği**: veritabanı zaten varsa yeni dosyalar üstüne **eklenir** (append); aynı dosya tekrar verilirse — farklı bir yoldan veya isimle bile (içerik özeti/SHA-256 ile tanınır) — otomatik atlanır
-- **Kaynak gösterme**: her cevabın altında, bilginin hangi PDF dosyasından ve hangi sayfadan geldiği listelenir
+- **Kaynak gösterme**: her cevabın altında, bilginin hangi PDF dosyasından ve hangi sayfalardan geldiği listelenir (`kitap.pdf, sayfa 1, 3, 4`)
+- **Kaynak metinleri (web)**: cevabın altındaki açılır **📖 Kaynak metinleri** bölümünde, modelin gördüğü PDF parçaları sayfa bilgisiyle gösterilir; böylece cevabı belgeyle karşılaştırıp kendiniz doğrulayabilirsiniz
 - **Sohbet hafızası + soru yeniden yazma**: konuşma geçmişi hatırlanır; "onun", "bunun" gibi zamirler içeren sorular, arama yapılmadan önce geçmişe göre kendi başına anlamlı bir soruya dönüştürülür (query rewriting), böylece veritabanında doğru parçalar bulunur. Geçmiş, bağlam penceresini taşırmasın diye son N mesajla sınırlanır
 - **Konu uyumu kontrolü**: getirilen bağlam, sorulan konuyla örtüşmüyorsa model bunu doğruymuş gibi sunmak yerine açıkça belirtir
-- **Otomatik testler + CI**: PDF işleme, tekrar-ekleme kontrolü, RAG zinciri (sahte model + bellekteki Chroma ile), sohbet geçmişi ve ayarlar için 58 pytest testi; her `git push`'ta GitHub Actions üzerinde Ubuntu ve Windows'ta çalışır, kod ayrıca `ruff` ile denetlenir. Testler Ollama gerektirmez
+- **Otomatik testler + CI**: PDF işleme, tekrar-ekleme kontrolü, RAG zinciri (sahte model + bellekteki Chroma ile), sohbet geçmişi ve ayarlar ve web arayüzü için 72 pytest testi; her `git push`'ta GitHub Actions üzerinde Ubuntu ve Windows'ta çalışır, kod ayrıca `ruff` ile denetlenir. Testler Ollama gerektirmez
 - **LCEL (LangChain Expression Language)** mimarisiyle kurulmuş modern RAG zinciri
 - `ChatOllama` ile chat-formatlı prompt kullanımı (sistem/kullanıcı rolleri)
 - Sistem promptu ile **her koşulda Türkçe yanıt** garantisi — bağlam İngilizce olsa bile
 - Model, dizin, chunk boyutu, bağlam penceresi, retriever ve geçmiş ayarlarının `config.py` üzerinden merkezi yönetimi; her ayar koda dokunmadan **ortam değişkeniyle** de değiştirilebilir
 - Web arayüzü ve CLI **aynı RAG çekirdeğini** (`rag_zinciri.py`) kullanır; prompt ve zincir tek bir yerde tanımlıdır
 - Anlaşılır Türkçe hata mesajları, aşamaya özel hata sınıfları (`PdfOkumaHatasi`, `VeritabaniHatasi`, `ModelHatasi`), `raise ... from e` ile korunmuş hata zinciri; CLI hata durumunda `1` çıkış koduyla biter
-- Web arayüzünden yüklenen dosya adları temizlenir (`../../` gibi klasör dışına yazma denemeleri engellenir)
+- Web arayüzünden yüklenen dosya adları temizlenir (`../../` gibi klasör dışına yazma denemeleri engellenir, çok uzun adlar kısaltılır)
+- **Gizlilik odaklı varsayılanlar**: web arayüzü sadece bu bilgisayardan erişilebilir (aynı ağdaki başkalarına açılmaz) ve Streamlit'in kullanım istatistiği gönderimi kapalıdır (`.streamlit/config.toml`)
 
 ---
 
@@ -49,6 +51,7 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 ├── config.py                 # Tüm ayarlar (tek nokta); ortam değişkenleriyle değiştirilebilir
 ├── tests/                    # Ollama'ya bağımlı olmayan pytest testleri
 │   ├── conftest.py           # Ortak test yardımcıları (sahte embedding, bellekteki Chroma)
+│   ├── test_app.py           # Web arayüzünün uçtan uca testleri (Streamlit AppTest + sahte model)
 │   ├── test_config.py
 │   ├── test_rag_motoru.py
 │   ├── test_rag_zinciri.py
@@ -61,6 +64,7 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 ├── requirements.in           # Projenin doğrudan kullandığı paketler (elle düzenlenen kısa liste)
 ├── requirements.txt          # Tüm bağımlılıkların test edilmiş, sabitlenmiş sürümleri (kurulumda bunu kullanın)
 ├── ruff.toml                 # Kod denetleyici (linter) ayarları
+├── .streamlit/config.toml    # Web arayüzü ayarları: sadece yerel erişim, istatistik gönderimi kapalı
 ├── .gitignore                # venv/, chroma_db/, web_chroma_db/, yuklenen_pdfler/, __pycache__/ hariç tutulur
 ├── chroma_db/                # CLI'nin vektör veritabanı (otomatik oluşur, repoya dahil edilmez)
 ├── web_chroma_db/            # Web arayüzünün kendi vektör veritabanı (otomatik oluşur, repoya dahil edilmez)
@@ -156,7 +160,9 @@ Kurulumdan sonra tek komutla, tarayıcıdan PDF yükleyip sohbet edebilirsiniz:
 streamlit run app.py
 ```
 
-Terminalde çıkan `Local URL` (genelde `http://localhost:8501`) tarayıcıda otomatik açılır.
+Terminalde çıkan adres (genelde `http://localhost:8501`) tarayıcıda otomatik açılır. Komutu **proje klasöründen** çalıştırın ki `.streamlit/config.toml` ayarları devreye girsin.
+
+> 🔒 Uygulama varsayılan olarak **sadece bu bilgisayardan** açılabilir. Aynı ağdaki başka bir cihazdan (örn. telefonunuzdan) bilerek erişmek isterseniz: `streamlit run app.py --server.address 0.0.0.0` — bu durumda ağınızdaki herkesin belgelerinize soru sorabileceğini unutmayın.
 
 **Nasıl kullanılır:**
 
@@ -164,7 +170,8 @@ Terminalde çıkan `Local URL` (genelde `http://localhost:8501`) tarayıcıda ot
 2. Sol kenar çubuğundan bir veya birden fazla PDF seçin, **"➕ Veritabanına Ekle"** butonuna basın.
 3. Ekleme bittiğinde dosya adı, kaç parçaya bölündüğüyle birlikte kalıcı bir ✅ onay satırı olarak sidebar'da görünür (sayfa yenilense de kaybolmaz). Aynı içerikteki bir dosya tekrar yüklenirse eklenmez ve bilgi mesajı gösterilir; **aynı isimde ama farklı içerikte** bir dosya yüklenirse karışıklık olmasın diye eklenmez, yeniden adlandırmanız istenir. Eklenemeyen dosyalar (bozuk/şifreli/taranmış PDF) için hata mesajı gösterilir.
 4. Artık ana ekranda sohbet kutusu açılır; sorularınızı yazabilirsiniz.
-5. Cevap, model ürettikçe akış halinde ekrana yazılır; altında hangi dosya/sayfadan geldiği (📚 Kaynaklar) gösterilir. Kaynaklar sohbet geçmişindeki eski cevaplarda da kalıcıdır.
+5. Cevap, model ürettikçe akış halinde ekrana yazılır; altında hangi dosya/sayfalardan geldiği (📚 Kaynaklar) gösterilir.
+6. Cevabın altındaki **📖 Kaynak metinleri** bölümünü açarak modelin okuduğu PDF parçalarını görebilirsiniz. Model bir bilgiyi yanlış aktarırsa (küçük yerel modellerde olabilir) doğrusunu burada hemen görürsünüz. Kaynaklar ve metinler sohbet geçmişindeki eski cevaplarda da kalıcıdır.
 
 **Sidebar'daki diğer kontroller:**
 
@@ -263,6 +270,7 @@ Testlerin hiçbiri Ollama gerektirmez: embedding için `langchain_core`'un deter
 | `test_rag_zinciri.py` | Kaynak listeleme, geçmiş kırpma, ilk soruda doğrudan arama, takip sorusunda **sorunun yeniden yazılıp öyle aranması**, akış (stream) çıktısı, gerçek Chroma ile zincir |
 | `test_soru_cevap.py` | Hata sonrası sohbetin devam etmesi, başarısız sorunun geçmişe yazılmaması, kırpılmış geçmişin gönderilmesi, veritabanı yokken anlaşılır hata |
 | `test_config.py` | Varsayılanlar, ortam değişkeniyle ayar ezme, geçersiz değerlerin anlaşılır hatası |
+| `test_app.py` | Web arayüzü uçtan uca: PDF yükleme, soru-cevap, kaynaklar ve kaynak metinleri, boş soru, kötü niyetli/çok uzun dosya adları, tekrar ekleme, sıfırlama |
 
 **Testleri yerel olarak çalıştırmak için:**
 
@@ -280,7 +288,7 @@ Her iki script de aynı korumayı sağlar: pytest'in başlangıçta sistem genel
 Beklenen çıktının sonu:
 
 ```
-============================== 58 passed in 1.3s ==============================
+============================== 72 passed in 4.6s ==============================
 ```
 
 **Kod denetimi (lint):** `pip install ruff` ile kurup `ruff check .` çalıştırabilirsiniz (ayarlar `ruff.toml` içinde).
@@ -312,7 +320,9 @@ Beklenen çıktının sonu:
 | `'...' modeli yüklenemedi. Ollama çalışıyor mu ...?` | Ollama arka planda çalışmıyor veya model indirilmemiş | `ollama serve` çalıştırın, mesajdaki `ollama pull ...` komutuyla modeli indirin; web arayüzünde ardından sayfayı yenileyin |
 | `Vektör veritabanı bulunamadı!` / `veritabanı boş!` | Önce `rag_motoru.py` çalıştırılmamış veya hiç PDF eklenmemiş | Önce PDF'leri işleyip veritabanını oluşturun |
 | `... içinden hiç metin çıkarılamadı. Taranmış (görsel) bir PDF olabilir` | PDF sadece görüntüden oluşuyor; proje OCR yapmıyor | PDF'i önce bir OCR aracıyla (örn. `ocrmypdf`) metin içeren hale getirin |
-| `... PDF olarak okunamadı (bozuk veya şifreli olabilir)` | Dosya bozuk, PDF değil veya parola korumalı | Dosyayı kontrol edin; şifreliyse parolasını kaldırıp tekrar deneyin |
+| `... parola korumalı` | PDF açılış parolası istiyor | PDF'in parolasını kaldırıp (örn. PDF okuyucunuzda "parolasız kaydet") tekrar deneyin. Sadece kopyalama/yazdırma kısıtlı PDF'ler sorunsuz okunur |
+| `... PDF olarak okunamadı (bozuk veya şifreli olabilir)` | Dosya bozuk veya PDF değil | Dosyayı bir PDF okuyucuyla açıp kontrol edin |
+| Web arayüzüne başka bir cihazdan bağlanılamıyor | Güvenlik için uygulama sadece `localhost`'u dinler | Bilerek açmak için `streamlit run app.py --server.address 0.0.0.0` (ağdaki herkes erişebilir) |
 | Web'de `'...' adında, içeriği farklı bir dosya zaten ekli` | Aynı isimli farklı bir dosya daha önce eklenmiş | Yeni dosyayı yeniden adlandırıp tekrar yükleyin |
 | `ModuleNotFoundError: No module named 'langchain.chains'` | LangChain 1.x kurulu; eski chain fonksiyonları `langchain_classic`'e taşındı | `pip install langchain-classic` kurup importları `langchain_classic.chains`'ten yapın |
 | `AttributeError: 'Chroma' object has no attribute 'persist'` | Yeni `langchain-chroma` paketinde `.persist()` kaldırıldı (otomatik persist var) | Kodda `.persist()` çağrısını silin |
@@ -341,7 +351,8 @@ Beklenen çıktının sonu:
 - **Testler** zincirin tamamını sahte embedding ve sahte LLM ile test eder; gerçek modellerin **cevap kalitesi** otomatik test edilmez (bunun için Ollama'nın CI ortamında çalışması gerekirdi).
 - Cevap kalitesi kullanılan LLM modeline (`llama3`), chunk boyutuna, `RETRIEVER_K` (veya web arayüzündeki k kaydırıcısı) ve `NUM_CTX` değerine göre değişebilir.
 - Proje, LangChain'in hızlı sürüm geçişlerine (0.1 → 0.3 → 1.x) uyum sağlayacak şekilde güncel tutulmuştur; `langchain_classic` gibi paket taşımalarını takip etmek gelecekte de gerekebilir.
-- Planlanan sonraki geliştirmeler: OCR desteği, cevap kalitesini ölçen küçük bir değerlendirme (eval) seti.
+- **Arama tamamen anlamsaldır (vektör benzerliği)**: özel isim, kod, madde numarası gibi birebir eşleşme gereken sorularda, ilgili cümle uzun ve konusu farklı bir paragrafın içindeyse bulunamayabilir. 300 sayfalık sentetik bir testte, rastgele metin arasına gizlenmiş tek bir cümle bu yüzden bulunamadı (model uydurmadı, bulamadığını söyledi). Böyle durumlarda soruyu belgedeki ifadelere yakın kurmak veya `k` değerini artırmak yardımcı olur.
+- Planlanan sonraki geliştirmeler: anlamsal arama + kelime araması (hibrit arama), OCR desteği, cevap kalitesini ölçen küçük bir değerlendirme (eval) seti.
 
 ---
 
