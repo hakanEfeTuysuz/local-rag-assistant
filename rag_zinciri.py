@@ -182,16 +182,38 @@ def gecmisi_kirp(chat_history: list[BaseMessage], max_mesaj: int = GECMIS_MAX_ME
 
 def kaynaklari_listele(dokumanlar) -> list[str]:
     """
-    Retriever'ın getirdiği doküman parçalarından benzersiz (dosya, sayfa)
-    kaynak listesi çıkarır. PDF sayfaları 0'dan sayılır,
-    kullanıcıya göstermeden önce 1 ekliyoruz.
+    Retriever'ın getirdiği doküman parçalarından, dosya başına tek satırlık
+    kaynak listesi çıkarır: ["kitap.pdf, sayfa 1, 3, 4", "cv.pdf, sayfa 2"].
+    Dosyalar ilk geçtikleri (en alakalı) sırayla, sayfalar artan sırayla
+    listelenir. PDF sayfaları 0'dan sayılır, kullanıcıya 1 eklenerek gösterilir.
     """
-    kaynaklar = []
+    sayfalar: dict[str, set[int]] = {}
     for doc in dokumanlar:
         dosya_adi = os.path.basename(doc.metadata.get("source", "bilinmeyen dosya"))
+        dosya_sayfalari = sayfalar.setdefault(dosya_adi, set())
         sayfa = doc.metadata.get("page")
-        if sayfa is not None:
-            kaynaklar.append(f"{dosya_adi}, sayfa {sayfa + 1}")
-        else:
-            kaynaklar.append(dosya_adi)
-    return list(dict.fromkeys(kaynaklar))
+        if isinstance(sayfa, int):
+            dosya_sayfalari.add(sayfa + 1)
+    return [
+        f"{ad}, sayfa {', '.join(str(s) for s in sorted(nolar))}" if nolar else ad
+        for ad, nolar in sayfalar.items()
+    ]
+
+
+def alintilari_cikar(dokumanlar, max_karakter: int = 500) -> list[dict]:
+    """
+    Cevabın dayandığı parçaların metinlerini, kullanıcının cevabı kendisi
+    doğrulayabilmesi için kısa alıntılar halinde döndürür:
+    [{"kaynak": "kitap.pdf, sayfa 3", "metin": "..."}]. Boşluklar sadeleştirilir,
+    aynı metin iki kez gösterilmez, uzun metinler kelime sınırında kısaltılır.
+    """
+    alintilar, gorulen = [], set()
+    for doc in dokumanlar:
+        metin = " ".join(doc.page_content.split())
+        if not metin or metin in gorulen:
+            continue
+        gorulen.add(metin)
+        if len(metin) > max_karakter:
+            metin = metin[:max_karakter].rsplit(" ", 1)[0] + " …"
+        alintilar.append({"kaynak": kaynaklari_listele([doc])[0], "metin": metin})
+    return alintilar

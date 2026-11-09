@@ -1,0 +1,16 @@
+# Streamlit ayarları — `streamlit run app.py` proje klasöründen çalıştırıldığında otomatik okunur.
+
+[server]
+# Uygulama sadece bu bilgisayardan açılabilir; belgeleriniz aynı ağdaki
+# (veya güvenlik duvarı yoksa internetteki) başkalarına açılmaz.
+# Ağdaki başka bir cihazdan bilerek erişmek isterseniz:
+#   streamlit run app.py --server.address 0.0.0.0
+address = "localhost"
+
+[browser]
+# Streamlit'in kullanım istatistiklerini kendi sunucularına göndermesini kapatır.
+gatherUsageStats = false
+
+[client]
+# Son kullanıcıya gerekmeyen geliştirici menülerini ("Deploy" vb.) gizler.
+toolbarMode = "minimal"

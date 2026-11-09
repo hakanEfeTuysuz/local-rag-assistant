@@ -106,6 +106,27 @@ def test_metinsiz_pdf_anlasilir_hata_verir(tmp_path):
         pdf_hazirla(str(bos))
 
 
+def _sifreli_kopya(kaynak, hedef, parola):
+    from pypdf import PdfReader, PdfWriter
+    yazici = PdfWriter(clone_from=PdfReader(kaynak))
+    yazici.encrypt(user_password=parola, owner_password="sahip")
+    with open(hedef, "wb") as f:
+        yazici.write(f)
+    return str(hedef)
+
+
+def test_parolali_pdf_anlasilir_mesajla_reddedilir(tmp_path, ornek_pdf):
+    yol = _sifreli_kopya(ornek_pdf, tmp_path / "gizli.pdf", "parola123")
+    with pytest.raises(PdfOkumaHatasi, match="parola korumalı"):
+        pdf_hazirla(yol)
+
+
+def test_bos_parolayla_sifrelenmis_pdf_okunabilir(tmp_path, ornek_pdf):
+    # Sadece kopyalama/yazdırma kısıtlı PDF'ler: açılış parolası yok, okunabilmeli
+    yol = _sifreli_kopya(ornek_pdf, tmp_path / "kisitli.pdf", "")
+    assert len(pdf_hazirla(yol)) == len(pdf_hazirla(ornek_pdf))
+
+
 # --- Gerçek (bellekteki) Chroma ile uçtan uca tekrar-ekleme kontrolü -------
 
 def test_ayni_dosya_farkli_yoldan_tekrar_eklenmez(bellek_db, ornek_pdf, tmp_path):
@@ -206,6 +227,18 @@ def test_yarida_kalan_ekleme_sonrasi_dosya_islenmemis_sayilir(bellek_db, ornek_p
 ])
 def test_guvenli_dosya_adi(girdi, beklenen):
     assert guvenli_dosya_adi(girdi) == beklenen
+
+
+def test_cok_uzun_dosya_adi_uzanti_korunarak_kisaltilir():
+    ad = guvenli_dosya_adi("ş" * 300 + ".pdf")  # Türkçe harf = 2 bayt
+    assert ad.endswith(".pdf")
+    assert len(ad.encode("utf-8")) <= 150
+    assert ad.startswith("şş")
+
+
+def test_cok_uzun_adli_dosya_diske_yazilabilir(tmp_path):
+    ad = guvenli_dosya_adi("b" * 400 + ".pdf")
+    (tmp_path / ad).write_bytes(b"x")  # eskiden 'File name too long' hatası veriyordu
 
 
 @pytest.mark.parametrize("girdi", ["", "..", "../", "   ", "a/.."])

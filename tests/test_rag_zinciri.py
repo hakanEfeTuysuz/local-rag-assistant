@@ -4,7 +4,7 @@ from langchain_core.language_models import FakeListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.retrievers import BaseRetriever
 
-from rag_zinciri import gecmisi_kirp, kaynaklari_listele, veritabani_bos_mu, zinciri_kur
+from rag_zinciri import alintilari_cikar, gecmisi_kirp, kaynaklari_listele, veritabani_bos_mu, zinciri_kur
 
 
 class SahteDoc:
@@ -61,6 +61,37 @@ def test_sayfa_bilgisi_yoksa_sadece_dosya_adi():
 
 def test_bos_liste():
     assert kaynaklari_listele([]) == []
+
+
+def test_ayni_dosyanin_sayfalari_tek_satirda_sirali_toplanir():
+    dokumanlar = [SahteDoc("kitap.pdf", 3), SahteDoc("cv.pdf", 0), SahteDoc("kitap.pdf", 0), SahteDoc("kitap.pdf", 2)]
+    # Dosyalar ilk geçtikleri (en alakalı) sırada, sayfalar küçükten büyüğe
+    assert kaynaklari_listele(dokumanlar) == ["kitap.pdf, sayfa 1, 3, 4", "cv.pdf, sayfa 1"]
+
+
+# --- alintilari_cikar -------------------------------------------------------
+
+def _doc(metin, source="kitap.pdf", page=0):
+    return Document(page_content=metin, metadata={"source": source, "page": page})
+
+
+def test_alintilar_kaynak_ve_metin_icerir():
+    assert alintilari_cikar([_doc("Gezegenin adı\n  Zephyra.", page=2)]) == [
+        {"kaynak": "kitap.pdf, sayfa 3", "metin": "Gezegenin adı Zephyra."}
+    ]
+
+
+def test_ayni_metin_iki_kez_gosterilmez_bos_metin_atlanir():
+    alintilar = alintilari_cikar([_doc("aynı"), _doc("aynı", page=5), _doc("   "), _doc("farklı")])
+    assert [a["metin"] for a in alintilar] == ["aynı", "farklı"]
+
+
+def test_uzun_alinti_kelime_sinirinda_kisaltilir():
+    metin = " ".join(["kelime"] * 200)
+    alinti = alintilari_cikar([_doc(metin)], max_karakter=50)[0]["metin"]
+    assert alinti.endswith(" …")
+    assert len(alinti) <= 52
+    assert "kelim …" not in alinti  # kelime ortasından kesilmez
 
 
 # --- gecmisi_kirp -----------------------------------------------------------

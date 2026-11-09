@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Windows'ta dosya adında kullanılamayan karakterler
 _GECERSIZ_KARAKTERLER = set('<>:"/\\|?*')
+_MAX_AD_BAYT = 150  # dosya sistemi sınırının (255 bayt) güvenli şekilde altında
 
 
 def dosya_hash_hesapla(dosya_yolu: str) -> str:
@@ -44,6 +45,15 @@ def guvenli_dosya_adi(isim: str) -> str:
     ad = "".join(c for c in ad if c.isprintable() and c not in _GECERSIZ_KARAKTERLER)
     if ad.strip(". ") == "":
         raise ValueError(f"Geçersiz dosya adı: {isim!r}")
+
+    # Çoğu dosya sistemi dosya adını 255 BAYT ile sınırlar (Türkçe harfler 2 bayt).
+    # Çok uzun adlar uzantı korunarak kısaltılır, yoksa diske yazarken hata alınır.
+    if len(ad.encode("utf-8")) > _MAX_AD_BAYT:
+        kok, uzanti = os.path.splitext(ad)
+        uzanti = uzanti[:10]
+        while kok and len((kok + uzanti).encode("utf-8")) > _MAX_AD_BAYT:
+            kok = kok[:-1]
+        ad = kok.rstrip() + uzanti
     return ad
 
 
@@ -63,6 +73,10 @@ def pdf_hazirla(dosya_yolu: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: in
     try:
         dosya_hash = dosya_hash_hesapla(dosya_yolu)
         okuyucu = PdfReader(dosya_yolu)
+        # Boş parolayla şifrelenmiş PDF'ler (sadece kopyalama/yazdırma kısıtlı) okunabilir;
+        # gerçek bir parola isteyenler ise anlaşılır bir mesajla reddedilir.
+        if okuyucu.is_encrypted and not okuyucu.decrypt(""):
+            raise PdfOkumaHatasi(f"'{ad}' parola korumalı. PDF'in parolasını kaldırıp tekrar deneyin.")
         sayfa_sayisi = len(okuyucu.pages)
         dokumanlar = [
             Document(
@@ -71,6 +85,8 @@ def pdf_hazirla(dosya_yolu: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: in
             )
             for i, sayfa in enumerate(okuyucu.pages)
         ]
+    except PdfOkumaHatasi:
+        raise
     except Exception as e:
         raise PdfOkumaHatasi(f"'{ad}' PDF olarak okunamadı (bozuk veya şifreli olabilir). Detay: {e}") from e
     logger.info(f"-> Başarılı! PDF toplam {sayfa_sayisi} sayfa olarak okundu.\n")
