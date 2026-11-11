@@ -18,7 +18,8 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 
 ## 🚀 Özellikler
 
-- **Streamlit web arayüzü**: tarayıcıdan sürükle-bırak PDF yükleme, ayarlanabilir arama derinliği (k), kalıcı oturum, tek tuşla veritabanı sıfırlama ve **akış halinde (token token) gelen cevaplar** — kurulumdan sonra tek komutla açılır
+- **Streamlit web arayüzü**: tarayıcıdan sürükle-bırak PDF yükleme, ayarlanabilir arama derinliği (k), kalıcı oturum ve **akış halinde (token token) gelen cevaplar** — kurulumdan sonra tek komutla açılır
+- **Modern ve sade arayüz**: açık/koyu temaya otomatik uyum, telefonda da düzgün görünüm, ilk açılışta 3 adımlı rehber, tek tıkla sorulabilen örnek sorular, cevap süresi ve kaynak rozetleri, onay isteyen veritabanı sıfırlama ve "Sohbeti Temizle" butonu. Yazı tipleri dahil hiçbir şey internetten yüklenmez
 - PDF dosyasını otomatik olarak okuma ve sayfalara ayırma
 - Metni anlamsal parçalara bölme (chunking)
 - `nomic-embed-text` modeli ile embedding oluşturma
@@ -28,7 +29,7 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 - **Kaynak metinleri (web)**: cevabın altındaki açılır **📖 Kaynak metinleri** bölümünde, modelin gördüğü PDF parçaları sayfa bilgisiyle gösterilir; böylece cevabı belgeyle karşılaştırıp kendiniz doğrulayabilirsiniz
 - **Sohbet hafızası + soru yeniden yazma**: konuşma geçmişi hatırlanır; "onun", "bunun" gibi zamirler içeren sorular, arama yapılmadan önce geçmişe göre kendi başına anlamlı bir soruya dönüştürülür (query rewriting), böylece veritabanında doğru parçalar bulunur. Geçmiş, bağlam penceresini taşırmasın diye son N mesajla sınırlanır
 - **Konu uyumu kontrolü**: getirilen bağlam, sorulan konuyla örtüşmüyorsa model bunu doğruymuş gibi sunmak yerine açıkça belirtir
-- **Otomatik testler + CI**: PDF işleme, tekrar-ekleme kontrolü, RAG zinciri (sahte model + bellekteki Chroma ile), sohbet geçmişi ve ayarlar ve web arayüzü için 72 pytest testi; her `git push`'ta GitHub Actions üzerinde Ubuntu ve Windows'ta çalışır, kod ayrıca `ruff` ile denetlenir. Testler Ollama gerektirmez
+- **Otomatik testler + CI**: PDF işleme, tekrar-ekleme kontrolü, RAG zinciri (sahte model + bellekteki Chroma ile), sohbet geçmişi ve ayarlar ve web arayüzü için 77 pytest testi; her `git push`'ta GitHub Actions üzerinde Ubuntu ve Windows'ta çalışır, kod ayrıca `ruff` ile denetlenir. Testler Ollama gerektirmez
 - **LCEL (LangChain Expression Language)** mimarisiyle kurulmuş modern RAG zinciri
 - `ChatOllama` ile chat-formatlı prompt kullanımı (sistem/kullanıcı rolleri)
 - Sistem promptu ile **her koşulda Türkçe yanıt** garantisi — bağlam İngilizce olsa bile
@@ -64,7 +65,7 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 ├── requirements.in           # Projenin doğrudan kullandığı paketler (elle düzenlenen kısa liste)
 ├── requirements.txt          # Tüm bağımlılıkların test edilmiş, sabitlenmiş sürümleri (kurulumda bunu kullanın)
 ├── ruff.toml                 # Kod denetleyici (linter) ayarları
-├── .streamlit/config.toml    # Web arayüzü ayarları: sadece yerel erişim, istatistik gönderimi kapalı
+├── .streamlit/config.toml    # Web arayüzü ayarları: tema (açık/koyu), sadece yerel erişim, istatistik gönderimi kapalı
 ├── .gitignore                # venv/, chroma_db/, web_chroma_db/, yuklenen_pdfler/, __pycache__/ hariç tutulur
 ├── chroma_db/                # CLI'nin vektör veritabanı (otomatik oluşur, repoya dahil edilmez)
 ├── web_chroma_db/            # Web arayüzünün kendi vektör veritabanı (otomatik oluşur, repoya dahil edilmez)
@@ -166,19 +167,20 @@ Terminalde çıkan adres (genelde `http://localhost:8501`) tarayıcıda otomatik
 
 **Nasıl kullanılır:**
 
-1. Sayfa ilk açıldığında henüz hiçbir PDF eklenmemiştir; sohbet kutusu görünmez, sadece "önce PDF ekleyin" mesajı vardır.
-2. Sol kenar çubuğundan bir veya birden fazla PDF seçin, **"➕ Veritabanına Ekle"** butonuna basın.
-3. Ekleme bittiğinde dosya adı, kaç parçaya bölündüğüyle birlikte kalıcı bir ✅ onay satırı olarak sidebar'da görünür (sayfa yenilense de kaybolmaz). Aynı içerikteki bir dosya tekrar yüklenirse eklenmez ve bilgi mesajı gösterilir; **aynı isimde ama farklı içerikte** bir dosya yüklenirse karışıklık olmasın diye eklenmez, yeniden adlandırmanız istenir. Eklenemeyen dosyalar (bozuk/şifreli/taranmış PDF) için hata mesajı gösterilir.
-4. Artık ana ekranda sohbet kutusu açılır; sorularınızı yazabilirsiniz.
-5. Cevap, model ürettikçe akış halinde ekrana yazılır; altında hangi dosya/sayfalardan geldiği (📚 Kaynaklar) gösterilir.
-6. Cevabın altındaki **📖 Kaynak metinleri** bölümünü açarak modelin okuduğu PDF parçalarını görebilirsiniz. Model bir bilgiyi yanlış aktarırsa (küçük yerel modellerde olabilir) doğrusunu burada hemen görürsünüz. Kaynaklar ve metinler sohbet geçmişindeki eski cevaplarda da kalıcıdır.
+1. Sayfa ilk açıldığında henüz hiçbir PDF eklenmemiştir; sohbet kutusu yerine 3 adımlı kısa bir rehber görünür.
+2. Sol kenar çubuğundan bir veya birden fazla PDF seçin, **"Veritabanına Ekle"** butonuna basın (telefonda kenar çubuğu sol üstteki `>>` ile açılır).
+3. Ekleme bittiğinde dosya, kaç parçaya bölündüğüyle birlikte kenar çubuğundaki **Belgeler** listesinde görünür (sayfa yenilense de kaybolmaz) ve seçim kutusu temizlenir. Aynı içerikteki bir dosya tekrar yüklenirse eklenmez ve bilgi mesajı gösterilir; **aynı isimde ama farklı içerikte** bir dosya yüklenirse karışıklık olmasın diye eklenmez, yeniden adlandırmanız istenir. Eklenemeyen dosyalar (bozuk/şifreli/taranmış PDF) için hata mesajı gösterilir.
+4. Artık ana ekranda sohbet kutusu açılır; sorunuzu yazabilir veya **örnek sorulardan** birine tıklayabilirsiniz.
+5. Cevap, model ürettikçe akış halinde ekrana yazılır; altında hangi dosya/sayfalardan geldiği (📄 kaynak rozetleri) ve cevabın kaç saniyede üretildiği gösterilir.
+6. Cevabın altındaki **Kaynak metinleri** bölümünü açarak modelin okuduğu PDF parçalarını görebilirsiniz. Model bir bilgiyi yanlış aktarırsa (küçük yerel modellerde olabilir) doğrusunu burada hemen görürsünüz. Kaynaklar ve metinler sohbet geçmişindeki eski cevaplarda da kalıcıdır.
 
 **Sidebar'daki diğer kontroller:**
 
 | Kontrol | Ne işe yarar |
 |---|---|
-| Kaydırıcı (k) | Her soruda veritabanından kaç parça getirileceğini ayarlar. Küçük/az sayfalı PDF'lerde düşük (2-4), büyük/çok sayfalı dosyalarda daha yüksek (6-10) değerler daha isabetli cevap verir. Aşırı yüksek değerler modelin bağlam penceresini zorlayıp cevap kalitesini düşürebilir. |
-| 🗑️ Veritabanını Sıfırla | Web arayüzünün kendi veritabanını (`web_chroma_db/`) ve yüklenen dosyaları tamamen temizler, sıfırdan başlamanızı sağlar. |
+| Ayarlar → kaydırıcı (k) | Her soruda veritabanından kaç parça getirileceğini ayarlar. Küçük/az sayfalı PDF'lerde düşük (2-4), büyük/çok sayfalı dosyalarda daha yüksek (6-10) değerler daha isabetli cevap verir. Aşırı yüksek değerler modelin bağlam penceresini zorlayıp cevap kalitesini düşürebilir. |
+| Sohbeti Temizle | Sadece sohbet geçmişini siler; eklenen belgeler kalır. |
+| Veritabanını Sıfırla | Onay istedikten sonra web arayüzünün kendi veritabanını (`web_chroma_db/`) ve yüklenen dosyaları tamamen temizler. |
 
 > ℹ️ Web arayüzü kendi `web_chroma_db/` klasörünü kullanır. Programı `Ctrl+C` ile kapatıp yeniden başlatsanız bile buradaki veriler kalıcıdır — kaybolmasını istiyorsanız yukarıdaki sıfırlama butonunu kullanmanız gerekir.
 
@@ -288,7 +290,7 @@ Her iki script de aynı korumayı sağlar: pytest'in başlangıçta sistem genel
 Beklenen çıktının sonu:
 
 ```
-============================== 72 passed in 4.6s ==============================
+============================== 77 passed in 6.3s ==============================
 ```
 
 **Kod denetimi (lint):** `pip install ruff` ile kurup `ruff check .` çalıştırabilirsiniz (ayarlar `ruff.toml` içinde).
