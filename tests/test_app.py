@@ -21,6 +21,7 @@ def uygulama(monkeypatch, tmp_path, sahte_embeddings):
 
     monkeypatch.setattr(config, "WEB_DB_DIR", str(tmp_path / "web_db"))
     monkeypatch.setattr(config, "UPLOAD_KLASORU", str(tmp_path / "uploads"))
+    monkeypatch.setattr(config, "TEMA_DOSYASI", str(tmp_path / "tema.txt"))  # projedeki seçim dosyasına dokunulmaz
     llm = FakeListChatModel(responses=["Bu CV Hakan Efe Tüysüz'e ait."])
     monkeypatch.setattr(rag_zinciri, "modelleri_yukle", lambda: (sahte_embeddings, llm))
     st.cache_resource.clear()  # önceki testin modelleri/veritabanı kullanılmasın
@@ -29,6 +30,8 @@ def uygulama(monkeypatch, tmp_path, sahte_embeddings):
     assert not at.exception, at.exception
     yield at
     st.cache_resource.clear()
+    from temalar import VARSAYILAN_TEMA, tema_uygula
+    tema_uygula(VARSAYILAN_TEMA)
 
 
 def _pdf_ekle(at, dosyalar):
@@ -156,3 +159,17 @@ def test_dosya_adindaki_ozel_karakterler_html_olarak_kacislanir(uygulama, pdf_ba
     uygulama.chat_input[0].set_value("Bu CV kimin?").run()
     kaynaklar = _kaynak_html(uygulama.chat_message[-1])
     assert "rapor_&amp;_son&#x27;hali.pdf" in kaynaklar
+
+
+def test_tema_secilince_kaydedilir_ve_uygulanir(uygulama, tmp_path):
+    from streamlit import config
+
+    secici = uygulama.sidebar.pills[0]
+    assert secici.value == "sistem"
+    secici.set_value("gunbatimi").run()
+    assert not uygulama.exception, uygulama.exception
+    assert (tmp_path / "tema.txt").read_text() == "gunbatimi"
+    assert config.get_option("theme.base") == "light"
+    assert config.get_option("theme.primaryColor") == "#C2410C"
+    assert uygulama.sidebar.pills[0].value == "gunbatimi"
+    assert any("--vurgu: 234, 88, 12" in m.value for m in uygulama.markdown)  # özel öğeler de temaya uyar

@@ -12,6 +12,7 @@ env/
 chroma_db/
 web_chroma_db/
 yuklenen_pdfler/
+.streamlit/secilen_tema.txt
 # Araç önbellekleri
 .pytest_cache/
 .ruff_cache/

@@ -39,7 +39,7 @@ backgroundColor = "#F8FAFC"
 secondaryBackgroundColor = "#EEF2F7"
 
 [theme.dark]
-primaryColor = "#818CF8"
+primaryColor = "#6E71F1"
 backgroundColor = "#0B1120"
 secondaryBackgroundColor = "#1A2333"
 textColor = "#E2E8F0"

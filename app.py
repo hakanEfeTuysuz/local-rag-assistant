@@ -7,7 +7,7 @@ import time
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage
 
-from config import LLM_MODEL, RETRIEVER_K, UPLOAD_KLASORU, WEB_DB_DIR  # WEB_DB_DIR, CLI'nin DB_DIR'ından bilerek ayrı
+from config import LLM_MODEL, RETRIEVER_K, TEMA_DOSYASI, UPLOAD_KLASORU, WEB_DB_DIR  # WEB_DB_DIR, CLI'nin DB_DIR'ından bilerek ayrı
 from rag_motoru import guvenli_dosya_adi, pdf_hazirla, vektor_veritabanina_kaydet
 from rag_zinciri import (
     RagHatasi,
@@ -18,6 +18,7 @@ from rag_zinciri import (
     vektor_db_ac,
     zinciri_kur,
 )
+from temalar import TEMALAR, kayitli_temayi_oku, tema_uygula, temayi_kaydet, vurgu_css
 
 KULLANICI_AVATARI = ":material/person:"
 ASISTAN_AVATARI = ":material/auto_awesome:"
@@ -31,8 +32,15 @@ st.set_page_config(
     page_title="Yerel RAG Asistanı", page_icon="📚", layout="centered", initial_sidebar_state="auto"
 )
 
-# Renkler .streamlit/config.toml'daki temadan gelir. Buradaki stiller yarı saydam
-# renkler kullandığı için açık ve koyu temada aynı şekilde okunaklı kalır.
+# Seçili renk teması (temalar.py). Tema değiştiyse yeni renklerin tarayıcıya
+# gitmesi için sayfa bir kez yeniden çalıştırılır.
+aktif_tema = kayitli_temayi_oku(TEMA_DOSYASI)
+if tema_uygula(aktif_tema):
+    st.rerun()
+
+# Ana renkler temadan gelir. Buradaki özel stiller yarı saydam renkler ve temanın
+# vurgu rengini (--vurgu) kullandığı için her temada okunaklı kalır.
+st.markdown(f"<style>{vurgu_css(aktif_tema)}</style>", unsafe_allow_html=True)
 st.markdown("""
 <style>
     .block-container { padding-top: 2rem; padding-bottom: 6rem; max-width: 820px; }
@@ -46,7 +54,7 @@ st.markdown("""
     .rozet {
         display: inline-flex; align-items: center; gap: 0.3rem;
         padding: 0.15rem 0.65rem; border-radius: 999px; font-size: 0.78rem; line-height: 1.6;
-        background: rgba(99, 102, 241, 0.10); border: 1px solid rgba(99, 102, 241, 0.25);
+        background: rgba(var(--vurgu), 0.10); border: 1px solid rgba(var(--vurgu), 0.25);
     }
     .rozet.kaynak { font-size: 0.8rem; background: rgba(127, 127, 127, 0.08); border-color: rgba(127, 127, 127, 0.22); }
     .rozetler.sol { justify-content: flex-start; margin-top: 0.35rem; }
@@ -56,7 +64,7 @@ st.markdown("""
     .adim .no {
         display: inline-flex; align-items: center; justify-content: center;
         width: 1.6rem; height: 1.6rem; border-radius: 50%; margin-bottom: 0.4rem;
-        font-weight: 700; font-size: 0.85rem; background: rgba(99, 102, 241, 0.15);
+        font-weight: 700; font-size: 0.85rem; background: rgba(var(--vurgu), 0.15);
     }
     .adim b { display: block; margin-bottom: 0.15rem; }
     .adim span { opacity: 0.7; }
@@ -69,7 +77,7 @@ st.markdown("""
     .belge .sayi { opacity: 0.55; font-size: 0.75rem; white-space: nowrap; }
     .bolum-basligi { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.55; margin: 0.5rem 0 0.4rem; }
 
-    .alinti { padding: 0.55rem 0.8rem; margin-bottom: 0.6rem; border-left: 3px solid rgba(99, 102, 241, 0.55);
+    .alinti { padding: 0.55rem 0.8rem; margin-bottom: 0.6rem; border-left: 3px solid rgba(var(--vurgu), 0.55);
               background: rgba(127, 127, 127, 0.06); border-radius: 0 0.5rem 0.5rem 0; }
     .alinti .kaynak-adi { font-size: 0.75rem; font-weight: 700; opacity: 0.7; margin-bottom: 0.2rem; }
     .alinti .metin { font-size: 0.88rem; line-height: 1.5; white-space: pre-wrap; }
@@ -222,6 +230,11 @@ def veritabanini_sifirla():
     return [("success", "🗑️ Veritabanı sıfırlandı.")]
 
 
+def _tema_degisti() -> None:
+    """Tema seçilince kaydedilir; sayfanın başındaki tema_uygula() yeni temayı devreye alır."""
+    temayi_kaydet(TEMA_DOSYASI, st.session_state.tema_secimi)
+
+
 # ---------------------------------------------------------------------------
 # Görünüm parçaları
 # ---------------------------------------------------------------------------
@@ -321,6 +334,15 @@ with st.sidebar:
             ),
             unsafe_allow_html=True,
         )
+
+    with st.expander("Görünüm", icon=":material/palette:"):
+        st.session_state.tema_secimi = aktif_tema  # başka sekmede değiştirildiyse de doğru seçili görünsün
+        st.pills(
+            "Renk teması", options=list(TEMALAR), format_func=lambda k: TEMALAR[k]["ad"], key="tema_secimi",
+            required=True, on_change=_tema_degisti, label_visibility="collapsed",
+        )
+        if TEMALAR[aktif_tema].get("aciklama"):
+            st.caption(TEMALAR[aktif_tema]["aciklama"])
 
     with st.expander("Ayarlar", icon=":material/tune:"):
         k_degeri = st.slider(

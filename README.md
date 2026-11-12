@@ -19,6 +19,7 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 ## 🚀 Özellikler
 
 - **Streamlit web arayüzü**: tarayıcıdan sürükle-bırak PDF yükleme, ayarlanabilir arama derinliği (k), kalıcı oturum ve **akış halinde (token token) gelen cevaplar** — kurulumdan sonra tek komutla açılır
+- **8 renk teması**: kenar çubuğundaki **Görünüm** bölümünden Sistem (açık/koyu otomatik), Gece Mavisi, Okyanus, Orman, Gün Batımı, Lavanta, Grafit ve Sepya arasında tek tıkla geçiş; seçim hatırlanır. Tüm temaların okunabilirliği (WCAG kontrast oranları) otomatik testle denetlenir
 - **Modern ve sade arayüz**: açık/koyu temaya otomatik uyum, telefonda da düzgün görünüm, ilk açılışta 3 adımlı rehber, tek tıkla sorulabilen örnek sorular, cevap süresi ve kaynak rozetleri, onay isteyen veritabanı sıfırlama ve "Sohbeti Temizle" butonu. Yazı tipleri dahil hiçbir şey internetten yüklenmez
 - PDF dosyasını otomatik olarak okuma ve sayfalara ayırma
 - Metni anlamsal parçalara bölme (chunking)
@@ -29,7 +30,7 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 - **Kaynak metinleri (web)**: cevabın altındaki açılır **📖 Kaynak metinleri** bölümünde, modelin gördüğü PDF parçaları sayfa bilgisiyle gösterilir; böylece cevabı belgeyle karşılaştırıp kendiniz doğrulayabilirsiniz
 - **Sohbet hafızası + soru yeniden yazma**: konuşma geçmişi hatırlanır; "onun", "bunun" gibi zamirler içeren sorular, arama yapılmadan önce geçmişe göre kendi başına anlamlı bir soruya dönüştürülür (query rewriting), böylece veritabanında doğru parçalar bulunur. Geçmiş, bağlam penceresini taşırmasın diye son N mesajla sınırlanır
 - **Konu uyumu kontrolü**: getirilen bağlam, sorulan konuyla örtüşmüyorsa model bunu doğruymuş gibi sunmak yerine açıkça belirtir
-- **Otomatik testler + CI**: PDF işleme, tekrar-ekleme kontrolü, RAG zinciri (sahte model + bellekteki Chroma ile), sohbet geçmişi ve ayarlar ve web arayüzü için 77 pytest testi; her `git push`'ta GitHub Actions üzerinde Ubuntu ve Windows'ta çalışır, kod ayrıca `ruff` ile denetlenir. Testler Ollama gerektirmez
+- **Otomatik testler + CI**: PDF işleme, tekrar-ekleme kontrolü, RAG zinciri (sahte model + bellekteki Chroma ile), sohbet geçmişi ve ayarlar web arayüzü ve temalar için 112 pytest testi; her `git push`'ta GitHub Actions üzerinde Ubuntu ve Windows'ta çalışır, kod ayrıca `ruff` ile denetlenir. Testler Ollama gerektirmez
 - **LCEL (LangChain Expression Language)** mimarisiyle kurulmuş modern RAG zinciri
 - `ChatOllama` ile chat-formatlı prompt kullanımı (sistem/kullanıcı rolleri)
 - Sistem promptu ile **her koşulda Türkçe yanıt** garantisi — bağlam İngilizce olsa bile
@@ -50,12 +51,14 @@ Bu proje, bulut API'lerine (OpenAI vb.) bağımlı kalmadan, tamamen yerel çal�
 ├── rag_motoru.py             # PDF'leri işleyip vektör veritabanını oluşturan/güncelleyen script (CLI)
 ├── soru_cevap.py             # Terminalden tek seferlik soru veya interaktif sohbet modu; kaynak gösterir
 ├── config.py                 # Tüm ayarlar (tek nokta); ortam değişkenleriyle değiştirilebilir
+├── temalar.py                # Web arayüzünün renk temaları ve tema değiştirme
 ├── tests/                    # Ollama'ya bağımlı olmayan pytest testleri
 │   ├── conftest.py           # Ortak test yardımcıları (sahte embedding, bellekteki Chroma)
 │   ├── test_app.py           # Web arayüzünün uçtan uca testleri (Streamlit AppTest + sahte model)
 │   ├── test_config.py
 │   ├── test_rag_motoru.py
 │   ├── test_rag_zinciri.py
+│   ├── test_temalar.py
 │   └── test_soru_cevap.py
 ├── testleri_calistir.sh      # Testleri, sistem kaynaklı plugin sorunlarından bağımsız çalıştıran script (Linux/Mac)
 ├── testleri_calistir.py      # Aynı işi yapan, Windows dahil her platformda çalışan Python karşılığı
@@ -178,6 +181,7 @@ Terminalde çıkan adres (genelde `http://localhost:8501`) tarayıcıda otomatik
 
 | Kontrol | Ne işe yarar |
 |---|---|
+| Görünüm | Renk temasını seçer (8 tema). Seçim `.streamlit/secilen_tema.txt` dosyasına kaydedilir, uygulama yeniden başlatılsa da korunur. |
 | Ayarlar → kaydırıcı (k) | Her soruda veritabanından kaç parça getirileceğini ayarlar. Küçük/az sayfalı PDF'lerde düşük (2-4), büyük/çok sayfalı dosyalarda daha yüksek (6-10) değerler daha isabetli cevap verir. Aşırı yüksek değerler modelin bağlam penceresini zorlayıp cevap kalitesini düşürebilir. |
 | Sohbeti Temizle | Sadece sohbet geçmişini siler; eklenen belgeler kalır. |
 | Veritabanını Sıfırla | Onay istedikten sonra web arayüzünün kendi veritabanını (`web_chroma_db/`) ve yüklenen dosyaları tamamen temizler. |
@@ -272,6 +276,7 @@ Testlerin hiçbiri Ollama gerektirmez: embedding için `langchain_core`'un deter
 | `test_rag_zinciri.py` | Kaynak listeleme, geçmiş kırpma, ilk soruda doğrudan arama, takip sorusunda **sorunun yeniden yazılıp öyle aranması**, akış (stream) çıktısı, gerçek Chroma ile zincir |
 | `test_soru_cevap.py` | Hata sonrası sohbetin devam etmesi, başarısız sorunun geçmişe yazılmaması, kırpılmış geçmişin gönderilmesi, veritabanı yokken anlaşılır hata |
 | `test_config.py` | Varsayılanlar, ortam değişkeniyle ayar ezme, geçersiz değerlerin anlaşılır hatası |
+| `test_temalar.py` | Her temanın eksiksiz olması, yazı/buton/bağlantı renklerinin WCAG kontrast sınırlarını sağlaması, tema geçişi ve seçimin kaydedilmesi |
 | `test_app.py` | Web arayüzü uçtan uca: PDF yükleme, soru-cevap, kaynaklar ve kaynak metinleri, boş soru, kötü niyetli/çok uzun dosya adları, tekrar ekleme, sıfırlama |
 
 **Testleri yerel olarak çalıştırmak için:**
@@ -290,7 +295,7 @@ Her iki script de aynı korumayı sağlar: pytest'in başlangıçta sistem genel
 Beklenen çıktının sonu:
 
 ```
-============================== 77 passed in 6.3s ==============================
+============================= 112 passed in 6.0s ==============================
 ```
 
 **Kod denetimi (lint):** `pip install ruff` ile kurup `ruff check .` çalıştırabilirsiniz (ayarlar `ruff.toml` içinde).

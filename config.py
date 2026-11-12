@@ -43,6 +43,7 @@ LLM_MODEL = _ortamdan_oku("RAG_LLM_MODEL", "llama3")
 DB_DIR = _dizin("RAG_DB_DIR", "chroma_db")                   # CLI'nin veritabanı
 WEB_DB_DIR = _dizin("RAG_WEB_DB_DIR", "web_chroma_db")       # Web arayüzünün veritabanı (bilerek ayrı)
 UPLOAD_KLASORU = _dizin("RAG_UPLOAD_KLASORU", "yuklenen_pdfler")
+TEMA_DOSYASI = _dizin("RAG_TEMA_DOSYASI", os.path.join(".streamlit", "secilen_tema.txt"))  # Web'de seçilen renk teması
 
 # Parçalama (Chunking) Ayarları
 CHUNK_SIZE = _ortamdan_oku("RAG_CHUNK_SIZE", 1000, int)
