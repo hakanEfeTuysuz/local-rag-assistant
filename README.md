@@ -125,17 +125,18 @@ Raporun ana sonuçları şunlardır: ...
 
 ## ⚙️ Nasıl Çalışır?
 
+**📥 Belge ekleme**
+
 ```mermaid
-flowchart TB
-    subgraph Ekleme["📥 Belge ekleme"]
-        direction LR
-        A[PDF] --> B[Sayfa sayfa<br/>okuma] --> C[Parçalara<br/>bölme] --> D[Vektöre<br/>çevirme] --> E[(ChromaDB)]
-    end
-    subgraph Soru["💬 Soru-cevap"]
-        direction LR
-        Q[Soru +<br/>geçmiş] --> R[Soruyu<br/>yeniden yazma] --> S[En benzer<br/>k parça] --> T[llama3 ile<br/>Türkçe cevap] --> U[Cevap +<br/>kaynaklar]
-    end
-    E -. arama .-> S
+flowchart LR
+    A[PDF] --> B[Sayfa sayfa<br/>okuma] --> C[Parçalara<br/>bölme] --> D[nomic-embed-text<br/>ile vektöre çevirme] --> E[(ChromaDB<br/>diskte)]
+```
+
+**💬 Soru-cevap**
+
+```mermaid
+flowchart LR
+    Q[Soru +<br/>geçmiş] --> R[Soruyu<br/>yeniden yazma] --> S[(ChromaDB'de en<br/>benzer k parça)] --> T[llama3 ile<br/>Türkçe cevap] --> U[Cevap +<br/>kaynaklar]
 ```
 
 1. **Okuma ve bölme:** PDF sayfa sayfa okunur (bozuk tek tük sayfalar atlanır), metin `RecursiveCharacterTextSplitter` ile örtüşen parçalara bölünür.
