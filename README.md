@@ -126,20 +126,16 @@ Raporun ana sonuçları şunlardır: ...
 ## ⚙️ Nasıl Çalışır?
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph Ekleme["📥 Belge ekleme"]
-        A[PDF] --> B["pypdf ile<br/>sayfa sayfa okuma"]
-        B --> C["~1000 karakterlik<br/>parçalara bölme"]
-        C --> D["nomic-embed-text<br/>ile vektörleştirme"]
-        D --> E[("ChromaDB<br/>(diskte)")]
+        direction LR
+        A[PDF] --> B[Sayfa sayfa<br/>okuma] --> C[Parçalara<br/>bölme] --> D[Vektöre<br/>çevirme] --> E[(ChromaDB)]
     end
     subgraph Soru["💬 Soru-cevap"]
-        Q[Soru + sohbet geçmişi] --> R["Soruyu bağımsız hale<br/>getirme (yeniden yazma)"]
-        R --> S["En benzer k parçayı<br/>bulma"]
-        E -.-> S
-        S --> T["llama3 ile Türkçe<br/>cevap üretme"]
-        T --> U["Cevap + kaynak sayfalar<br/>+ kaynak metinleri"]
+        direction LR
+        Q[Soru +<br/>geçmiş] --> R[Soruyu<br/>yeniden yazma] --> S[En benzer<br/>k parça] --> T[llama3 ile<br/>Türkçe cevap] --> U[Cevap +<br/>kaynaklar]
     end
+    E -. arama .-> S
 ```
 
 1. **Okuma ve bölme:** PDF sayfa sayfa okunur (bozuk tek tük sayfalar atlanır), metin `RecursiveCharacterTextSplitter` ile örtüşen parçalara bölünür.
