@@ -264,3 +264,42 @@ def test_cli_basarili_ekleme_ve_tekrar_atlama(monkeypatch, tmp_path, sahte_embed
     monkeypatch.setattr(rag_motoru, "embedding_yukle", lambda: sahte_embeddings)
     assert main(["--pdf", ornek_pdf]) == 0
     assert main(["--pdf", ornek_pdf]) == 0  # ikinci seferde atlanır, hata değil
+
+
+def test_metni_okunamayan_sayfa_atlanir_pdfin_geri_kalani_islenir(tmp_path, ornek_pdf, monkeypatch, caplog):
+    from pypdf import PdfReader, PdfWriter
+    from pypdf._page import PageObject
+
+    iki_sayfa = tmp_path / "iki_sayfa.pdf"
+    yazici = PdfWriter()
+    for _ in range(2):
+        yazici.add_page(PdfReader(ornek_pdf).pages[0])
+    with open(iki_sayfa, "wb") as f:
+        yazici.write(f)
+
+    asil = PageObject.extract_text
+    cagri = {"n": 0}
+
+    def ilk_sayfada_bozul(self, *a, **kw):
+        cagri["n"] += 1
+        if cagri["n"] == 1:
+            raise ValueError("bozuk sayfa akışı")
+        return asil(self, *a, **kw)
+
+    monkeypatch.setattr(PageObject, "extract_text", ilk_sayfada_bozul)
+    with caplog.at_level("WARNING"):
+        parcalar = pdf_hazirla(str(iki_sayfa))
+    assert parcalar and {p.metadata["page"] for p in parcalar} == {1}  # sadece 2. sayfa
+    assert "1 sayfanın metni okunamadı" in caplog.text
+
+
+def test_cli_dosya_ozetini_dosya_basina_bir_kez_hesaplar(monkeypatch, tmp_path, sahte_embeddings, ornek_pdf):
+    import rag_motoru
+
+    monkeypatch.setattr(rag_motoru, "DB_DIR", str(tmp_path / "db"))
+    monkeypatch.setattr(rag_motoru, "embedding_yukle", lambda: sahte_embeddings)
+    asil = rag_motoru.dosya_hash_hesapla
+    cagrilar = []
+    monkeypatch.setattr(rag_motoru, "dosya_hash_hesapla", lambda yol: cagrilar.append(yol) or asil(yol))
+    assert main(["--pdf", ornek_pdf]) == 0
+    assert len(cagrilar) == 1  # eskiden kontrol ve okuma için iki kez okunuyordu

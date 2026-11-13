@@ -57,11 +57,16 @@ def guvenli_dosya_adi(isim: str) -> str:
     return ad
 
 
-def pdf_hazirla(dosya_yolu: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: int = CHUNK_OVERLAP) -> list[Document]:
+def pdf_hazirla(
+    dosya_yolu: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: int = CHUNK_OVERLAP, dosya_hash: str | None = None
+) -> list[Document]:
     """
     PDF'i sayfa sayfa okur ve parçalara böler. Her parçanın metadata'sında
     'source' (dosyanın mutlak yolu), 'page' (0'dan başlayan sayfa no) ve
     'dosya_hash' (içerik özeti, tekrar eklemeyi önlemek için) bulunur.
+
+    dosya_hash daha önce hesaplandıysa verilebilir; dosya ikinci kez okunmaz.
+    Metni çıkarılamayan tek tük bozuk sayfalar tüm PDF'i reddettirmez, atlanır.
     """
     logger.info(f"1. Aşama: '{dosya_yolu}' yükleniyor...")
 
@@ -71,25 +76,33 @@ def pdf_hazirla(dosya_yolu: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: in
     kaynak = os.path.abspath(dosya_yolu)
     ad = os.path.basename(dosya_yolu)  # hata mesajlarında sunucu yolunu değil sadece dosya adını göster
     try:
-        dosya_hash = dosya_hash_hesapla(dosya_yolu)
+        if dosya_hash is None:
+            dosya_hash = dosya_hash_hesapla(dosya_yolu)
         okuyucu = PdfReader(dosya_yolu)
         # Boş parolayla şifrelenmiş PDF'ler (sadece kopyalama/yazdırma kısıtlı) okunabilir;
         # gerçek bir parola isteyenler ise anlaşılır bir mesajla reddedilir.
         if okuyucu.is_encrypted and not okuyucu.decrypt(""):
             raise PdfOkumaHatasi(f"'{ad}' parola korumalı. PDF'in parolasını kaldırıp tekrar deneyin.")
         sayfa_sayisi = len(okuyucu.pages)
-        dokumanlar = [
-            Document(
-                page_content=sayfa.extract_text() or "",
-                metadata={"source": kaynak, "page": i, "total_pages": sayfa_sayisi, "dosya_hash": dosya_hash},
-            )
-            for i, sayfa in enumerate(okuyucu.pages)
-        ]
     except PdfOkumaHatasi:
         raise
     except Exception as e:
         raise PdfOkumaHatasi(f"'{ad}' PDF olarak okunamadı (bozuk veya şifreli olabilir). Detay: {e}") from e
+
+    dokumanlar, okunamayanlar = [], []
+    for i in range(sayfa_sayisi):
+        try:
+            metin = okuyucu.pages[i].extract_text() or ""
+        except Exception:
+            okunamayanlar.append(i + 1)
+            continue
+        dokumanlar.append(Document(
+            page_content=metin,
+            metadata={"source": kaynak, "page": i, "total_pages": sayfa_sayisi, "dosya_hash": dosya_hash},
+        ))
     logger.info(f"-> Başarılı! PDF toplam {sayfa_sayisi} sayfa olarak okundu.\n")
+    if okunamayanlar:
+        logger.warning(f"⚠️  '{ad}': {len(okunamayanlar)} sayfanın metni okunamadı ve atlandı (sayfa {', '.join(map(str, okunamayanlar))}).")
 
     logger.info("2. Aşama: Metin parçalara bölünüyor (Chunking)...")
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
@@ -104,18 +117,21 @@ def pdf_hazirla(dosya_yolu: str, chunk_size: int = CHUNK_SIZE, chunk_overlap: in
     return parcalar
 
 
-def dosya_zaten_islendi_mi(vektor_db, dosya_yolu: str) -> bool:
+def dosya_zaten_islendi_mi(vektor_db, dosya_yolu: str, dosya_hash: str | None = None) -> bool:
     """
     Aynı dosyanın veritabanına daha önce eklenip eklenmediğini kontrol eder.
       - Yol karşılaştırması normalize edilir: 'cv.pdf', './cv.pdf' ve tam yol
         aynı dosya sayılır (eski sürümün kaydettiği göreli yollar da bulunur).
       - Dosya diskte varsa içerik özeti (hash) de aranır: aynı dosya farklı bir
-        klasörden/isimle verilse bile tekrar eklenmez.
+        klasörden/isimle verilse bile tekrar eklenmez. Önceden hesaplandıysa
+        dosya_hash verilebilir; dosya tekrar okunmaz.
     """
     yol_adaylari = sorted({dosya_yolu, os.path.normpath(dosya_yolu), os.path.abspath(dosya_yolu)})
     kosullar = [{"source": {"$in": yol_adaylari}}]
-    if os.path.isfile(dosya_yolu):
-        kosullar.append({"dosya_hash": dosya_hash_hesapla(dosya_yolu)})
+    if dosya_hash is None and os.path.isfile(dosya_yolu):
+        dosya_hash = dosya_hash_hesapla(dosya_yolu)
+    if dosya_hash:
+        kosullar.append({"dosya_hash": dosya_hash})
 
     where = kosullar[0] if len(kosullar) == 1 else {"$or": kosullar}
     try:
@@ -190,10 +206,12 @@ def main(argv=None) -> int:
     basarisizlar = []
     for dosya_yolu in args.pdf:
         try:
-            if dosya_zaten_islendi_mi(vektor_db, dosya_yolu):
+            # İçerik özeti bir kez hesaplanır; hem tekrar kontrolünde hem parçalarda kullanılır
+            dosya_hash = dosya_hash_hesapla(dosya_yolu) if os.path.isfile(dosya_yolu) else None
+            if dosya_zaten_islendi_mi(vektor_db, dosya_yolu, dosya_hash):
                 logger.info(f"⏭️  '{dosya_yolu}' zaten veritabanında var, atlanıyor.\n")
                 continue
-            parcalar = pdf_hazirla(dosya_yolu)
+            parcalar = pdf_hazirla(dosya_yolu, dosya_hash=dosya_hash)
             vektor_veritabanina_kaydet(parcalar, vektor_db)
         except (RagHatasi, OSError) as hata:  # OSError: dosya yok / okunamıyor
             print(f"\n❌ HATA ('{dosya_yolu}'): {hata}\n", file=sys.stderr)

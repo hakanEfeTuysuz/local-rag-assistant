@@ -20,7 +20,7 @@ jobs:
 
       - name: Ruff ile kod kontrolü
         run: |
-          pip install ruff
+          pip install ruff==0.17.3   # sabit sürüm: ruff güncellenince kod değişmeden CI kırılmasın
           ruff check .
 
   test:

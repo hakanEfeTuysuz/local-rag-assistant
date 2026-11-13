@@ -189,7 +189,7 @@ def pdfleri_ekle(yuklenen_dosyalar, mevcut_dosyalar):
             with open(dosya_yolu, "wb") as f:
                 f.write(icerik)
             with st.spinner(f"'{ad}' okunuyor..."):
-                parcalar = pdf_hazirla(dosya_yolu)
+                parcalar = pdf_hazirla(dosya_yolu, dosya_hash=dosya_hash)  # özet zaten hesaplandı
             cubuk = st.progress(0.0, text=f"'{ad}' veritabanına ekleniyor...")
             try:
                 vektor_veritabanina_kaydet(
